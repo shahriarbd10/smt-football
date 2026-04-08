@@ -1,6 +1,7 @@
 import { defaultMatch, type EventType, type TeamKey } from "@/lib/match";
 import { connectToDatabase } from "@/lib/mongodb";
 import { MatchModel } from "@/models/Match";
+import mongoose from "mongoose";
 
 const MATCH_SLUG = defaultMatch.slug;
 
@@ -12,9 +13,24 @@ export async function getOrCreateMatch() {
   if (!match) {
     await MatchModel.create(defaultMatch);
     match = await MatchModel.findOne({ slug: MATCH_SLUG }).lean();
-  } else if (!match.kickoffTime) {
-    await MatchModel.updateOne({ slug: MATCH_SLUG }, { $set: { kickoffTime: new Date("2026-04-08T18:00:00+06:00") } });
-    match = await MatchModel.findOne({ slug: MATCH_SLUG }).lean();
+  } else {
+    // Check for missing kickoffTime
+    if (!match.kickoffTime) {
+      await MatchModel.updateOne({ slug: MATCH_SLUG }, { $set: { kickoffTime: new Date("2026-04-08T18:00:00+06:00") } });
+      match = await MatchModel.findOne({ slug: MATCH_SLUG }).lean();
+    }
+    
+    // Self-healing migration for missing event IDs (Fixing production deletion issues)
+    if (match.events && match.events.some((e: any) => !e._id)) {
+      const matchDoc = await MatchModel.findOne({ slug: MATCH_SLUG });
+      if (matchDoc) {
+        matchDoc.events.forEach((event: any) => {
+          if (!event._id) event._id = new mongoose.Types.ObjectId();
+        });
+        await matchDoc.save();
+        match = await MatchModel.findOne({ slug: MATCH_SLUG }).lean();
+      }
+    }
   }
 
   return match;

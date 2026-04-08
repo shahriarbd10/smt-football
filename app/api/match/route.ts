@@ -7,14 +7,6 @@ export async function GET() {
     const match = await getOrCreateMatch();
     return Response.json(match);
   } catch (error: any) {
-    console.error("API MATCH ERROR:", error);
-    return Response.json(
-      { 
-        error: "Internal Server Error", 
-        message: error.message,
-        stack: process.env.NODE_ENV === "development" ? error.stack : undefined
-      }, 
-      { status: 500 }
-    );
+    return Response.json({ error: "Could not load match" }, { status: 500 });
   }
 }
