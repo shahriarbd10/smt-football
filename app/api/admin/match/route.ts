@@ -5,6 +5,10 @@ import {
   setElapsedMinutes,
   setLineup,
   setScore,
+  setKickoffTime,
+  setPlayerPosition,
+  removeEvent,
+  updatePlayerStat,
 } from "@/lib/match-service";
 import type { EventType, TeamKey } from "@/lib/match";
 
@@ -76,6 +80,29 @@ export async function PATCH(request: Request) {
         body.teamKey as TeamKey,
         Number(body.score ?? 0),
       );
+      return Response.json(result);
+    }
+
+    if (action === "setKickoffTime") {
+      const result = await setKickoffTime(body.kickoffTime as string);
+      return Response.json(result);
+    }
+
+    if (action === "setPlayerPosition") {
+      const { teamKey, playerName, x, y } = body as any;
+      const result = await setPlayerPosition(teamKey, playerName, x, y);
+      return Response.json(result);
+    }
+
+    if (action === "removeEvent") {
+      const { eventId } = body as any;
+      const result = await removeEvent(eventId);
+      return Response.json(result);
+    }
+
+    if (action === "updatePlayerStat") {
+      const { teamKey, playerName, stat, increment } = body as any;
+      const result = await updatePlayerStat(teamKey, playerName, stat, increment);
       return Response.json(result);
     }
 

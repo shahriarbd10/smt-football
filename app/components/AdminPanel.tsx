@@ -2,11 +2,35 @@
 
 import { FormEvent, useMemo, useState } from "react";
 import useSWR from "swr";
+import { motion, AnimatePresence } from "framer-motion";
+import { 
+  Settings, 
+  Users, 
+  Zap, 
+  LogOut, 
+  ShieldCheck, 
+  Lock,
+  Clock, 
+  Plus, 
+  Minus,
+  CheckCircle2,
+  AlertCircle,
+  LayoutDashboard,
+  Save,
+  Activity,
+  Calendar,
+  MousePointer2,
+  Trash2
+} from "lucide-react";
+import { TacticalCanvas } from "./shared/TacticalCanvas";
 
 type Player = {
   name: string;
   isStarter: boolean;
   isGoalkeeper: boolean;
+  goals: number;
+  assists: number;
+  position?: { x: number; y: number };
 };
 
 type Team = {
@@ -16,23 +40,28 @@ type Team = {
   players: Player[];
 };
 
+type MatchEvent = {
+  _id?: string;
+  minute: number;
+  teamKey: "A" | "B";
+  playerName: string;
+  type: string;
+  createdAt: string;
+};
+
 type MatchData = {
+  title: string;
   elapsedMinutes: number;
   slotMinutes: number;
   teams: Team[];
+  events: MatchEvent[];
+  kickoffTime: string;
 };
 
 const fetcher = async (url: string): Promise<MatchData> => {
   const response = await fetch(url);
-
-  if (response.status === 401) {
-    throw new Error("UNAUTHORIZED");
-  }
-
-  if (!response.ok) {
-    throw new Error("Could not load admin data");
-  }
-
+  if (response.status === 401) throw new Error("UNAUTHORIZED");
+  if (!response.ok) throw new Error("Could not load admin data");
   return response.json();
 };
 
@@ -42,25 +71,21 @@ async function patchMatch(payload: Record<string, unknown>) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
-
   const data = await response.json();
-
-  if (!response.ok) {
-    throw new Error(data?.error || "Request failed");
-  }
-
+  if (!response.ok) throw new Error(data?.error || "Request failed");
   return data;
 }
 
 export default function AdminPanel() {
   const { data, error, mutate, isLoading } = useSWR("/api/admin/match", fetcher);
-
+  
+  const [activeTab, setActiveTab] = useState<"overview" | "lineup" | "events">("overview");
   const [email, setEmail] = useState("smtfootball@admin.com");
   const [password, setPassword] = useState("123456");
   const [selectedTeam, setSelectedTeam] = useState<"A" | "B">("A");
   const [playerName, setPlayerName] = useState("");
   const [minute, setMinute] = useState(1);
-  const [eventType, setEventType] = useState<"goal" | "foul" | "yellow" | "red">("goal");
+  const [eventType, setEventType] = useState<"goal" | "assist" | "foul" | "yellow" | "red">("goal");
   const [message, setMessage] = useState("");
 
   const unauthorized = error?.message === "UNAUTHORIZED";
@@ -72,19 +97,16 @@ export default function AdminPanel() {
 
   async function login(e: FormEvent) {
     e.preventDefault();
-
     const response = await fetch("/api/admin/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password }),
     });
-
     if (!response.ok) {
-      setMessage("Login failed.");
+      setMessage("Invalid credentials.");
       return;
     }
-
-    setMessage("Admin access granted.");
+    setMessage("Logged in successfully.");
     await mutate();
   }
 
@@ -97,10 +119,10 @@ export default function AdminPanel() {
   async function updateClock(elapsedMinutes: number) {
     try {
       await patchMatch({ action: "setElapsedMinutes", elapsedMinutes });
-      setMessage("Clock updated.");
+      setMessage("Match clock syncronized.");
       await mutate();
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Clock update failed.");
+      setMessage(err instanceof Error ? err.message : "Sync error.");
     }
   }
 
@@ -110,18 +132,16 @@ export default function AdminPanel() {
       setMessage("Score updated.");
       await mutate();
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Score update failed.");
+      setMessage("Score sync failed.");
     }
   }
 
   async function submitEvent(e: FormEvent) {
     e.preventDefault();
-
     if (!playerName) {
-      setMessage("Select a player first.");
+      setMessage("Please select a player.");
       return;
     }
-
     try {
       await patchMatch({
         action: "recordEvent",
@@ -130,11 +150,10 @@ export default function AdminPanel() {
         type: eventType,
         minute,
       });
-
-      setMessage("Event recorded.");
+      setMessage(`${eventType.toUpperCase()} recorded for ${playerName}.`);
       await mutate();
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Event failed.");
+      setMessage("Event recording failed.");
     }
   }
 
@@ -142,8 +161,13 @@ export default function AdminPanel() {
     const starters = team.players.filter((p) => p.isStarter).map((p) => p.name);
     const goalkeeper = team.players.find((p) => p.isGoalkeeper)?.name;
 
+    if (starters.length !== 6) {
+      setMessage(`Select exactly 6 starters (currently ${starters.length}).`);
+      return;
+    }
+
     if (!goalkeeper) {
-      setMessage("Select one goalkeeper for this team.");
+      setMessage("Select 1 goalkeeper.");
       return;
     }
 
@@ -154,218 +178,532 @@ export default function AdminPanel() {
         starters,
         goalkeeper,
       });
-      setMessage(`${team.name} lineup saved.`);
+      setMessage(`${team.name} lineup confirmed.`);
       await mutate();
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Could not save lineup.");
+      setMessage(err instanceof Error ? err.message : "Lineup save error.");
+    }
+  }
+
+  async function handlePlayerPositionChange(teamKey: "A" | "B", playerName: string, x: number, y: number) {
+    try {
+      // Optimistic update
+      const updatedTeams = data?.teams.map(t => {
+        if (t.key !== teamKey) return t;
+        return {
+          ...t,
+          players: t.players.map(p => p.name === playerName ? { ...p, position: { x, y } } : p)
+        };
+      });
+      if (updatedTeams) {
+        mutate({ ...data!, teams: updatedTeams }, false);
+      }
+
+      await patchMatch({
+        action: "setPlayerPosition",
+        teamKey,
+        playerName,
+        x,
+        y
+      });
+    } catch (err) {
+      setMessage("Failed to save position.");
+    }
+  }
+
+  async function updatePlayerStatInline(teamKey: "A" | "B", playerName: string, stat: "goals" | "assists", increment: boolean) {
+    try {
+      await patchMatch({
+        action: "updatePlayerStat",
+        teamKey,
+        playerName,
+        stat,
+        increment
+      });
+      mutate();
+    } catch (err) {
+      setMessage("Failed to update stat.");
+    }
+  }
+
+  async function removeMatchEvent(eventId: string) {
+    if (!eventId) {
+      setMessage("Error: Event ID is missing.");
+      return;
+    }
+    try {
+      await patchMatch({
+        action: "removeEvent",
+        eventId
+      });
+      mutate();
+      setMessage("Event removed and stats rolled back.");
+    } catch (err: any) {
+      setMessage(`Failed to remove event: ${err.message || "Unknown error"}`);
     }
   }
 
   if (unauthorized) {
     return (
-      <main className="mx-auto flex w-full max-w-lg flex-1 items-center justify-center px-4 py-10">
-        <form onSubmit={login} className="glass-card w-full rounded-3xl p-6">
-          <p className="text-xs tracking-[0.3em] text-emerald-200/80">ADMIN ACCESS</p>
-          <h1 className="mt-1 text-4xl text-white">SMT Match Control</h1>
-
-          <div className="mt-5 space-y-3">
-            <input
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded-xl border border-white/20 bg-black/25 px-3 py-2 text-white outline-none"
-              placeholder="Email"
-            />
-            <input
-              value={password}
-              type="password"
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-xl border border-white/20 bg-black/25 px-3 py-2 text-white outline-none"
-              placeholder="Password"
-            />
-            <button className="w-full rounded-xl bg-emerald-500 px-4 py-2 font-semibold text-black">Log In</button>
+      <main className="mx-auto flex w-full max-w-lg flex-1 items-center justify-center px-4 py-20">
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="glass-pane w-full rounded-[2.5rem] p-10 text-center"
+        >
+          <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-3xl bg-rose-500/10 text-rose-500">
+            <Lock size={40} />
           </div>
-
-          {message ? <p className="mt-3 text-sm text-emerald-100">{message}</p> : null}
-        </form>
+          <p className="text-[10px] font-bold tracking-[0.4em] text-rose-400 uppercase mb-2">Access Revoked</p>
+          <h1 className="text-4xl font-bold text-white mb-8">Unauthorized</h1>
+          <a 
+            href="/admin/login"
+            className="inline-block w-full rounded-2xl bg-emerald-500 px-6 py-4 font-bold text-black hover:bg-emerald-400 transition-all"
+          >
+            Go to Login
+          </a>
+        </motion.div>
       </main>
     );
   }
 
   if (isLoading || !data) {
-    return <main className="mx-auto w-full max-w-6xl px-4 py-10 text-emerald-100">Loading admin panel...</main>;
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <motion.div 
+          animate={{ rotate: 360 }}
+          transition={{ repeat: Infinity, duration: 2, ease: "linear" }}
+          className="h-12 w-12 rounded-full border-4 border-emerald-500/20 border-t-emerald-500"
+        />
+      </div>
+    );
   }
 
   return (
-    <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-5 px-4 py-8">
-      <section className="glass-card rounded-3xl p-6">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <p className="text-xs tracking-[0.3em] text-emerald-200/80">ADMIN PANEL</p>
-            <h1 className="text-5xl text-white">Live Match Controls</h1>
-          </div>
-          <button onClick={logout} className="rounded-xl border border-white/20 bg-black/30 px-4 py-2 text-white">
-            Logout
-          </button>
+    <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 px-4 py-8">
+      {/* Header with Navigation */}
+      <header className="glass-pane flex flex-col gap-6 rounded-[2rem] p-6 md:flex-row md:items-center md:justify-between" role="banner">
+        <div>
+          <p className="text-[10px] font-bold tracking-[0.4em] text-emerald-400 uppercase mb-1">HQ Command</p>
+          <h1 className="text-3xl font-bold text-white flex items-center gap-3">
+            <LayoutDashboard className="text-emerald-500" aria-hidden="true" />
+            Live Dashboard
+          </h1>
         </div>
 
-        <div className="mt-4 grid gap-3 md:grid-cols-3">
-          <div className="rounded-xl border border-white/15 bg-black/20 p-3">
-            <p className="text-sm text-white/80">Elapsed Minutes</p>
-            <div className="mt-2 flex gap-2">
-              <input
-                type="number"
-                min={0}
-                max={data.slotMinutes}
-                defaultValue={data.elapsedMinutes}
-                onBlur={(e) => updateClock(Number(e.target.value))}
-                className="w-full rounded-lg border border-white/20 bg-black/20 px-2 py-1 text-white"
-              />
-            </div>
-          </div>
-
-          {data.teams.map((team) => (
-            <div key={team.key} className="rounded-xl border border-white/15 bg-black/20 p-3">
-              <p className="text-sm text-white/80">{team.name} Score</p>
-              <input
-                type="number"
-                min={0}
-                defaultValue={team.score}
-                onBlur={(e) => updateScore(team.key, Number(e.target.value))}
-                className="mt-2 w-full rounded-lg border border-white/20 bg-black/20 px-2 py-1 text-white"
-              />
-            </div>
+        <nav className="flex items-center gap-2 rounded-2xl bg-black/20 p-1" aria-label="Admin Navigation">
+          {[
+            { id: "overview", icon: Settings, label: "Match" },
+            { id: "lineup", icon: Users, label: "Squads" },
+            { id: "events", icon: Zap, label: "Events" },
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id as any)}
+              aria-current={activeTab === tab.id ? "page" : undefined}
+              className={`flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-bold transition-all ${
+                activeTab === tab.id 
+                ? "bg-emerald-500 text-black shadow-lg shadow-emerald-500/20" 
+                : "text-white/60 hover:text-white"
+              }`}
+            >
+              <tab.icon size={16} aria-hidden="true" />
+              <span className="hidden sm:inline">{tab.label}</span>
+            </button>
           ))}
-        </div>
-      </section>
+          <div className="mx-2 h-6 w-px bg-white/10" aria-hidden="true" />
+          <button 
+            onClick={logout} 
+            className="rounded-xl px-4 py-2 text-white/40 hover:text-rose-400 transition-colors"
+            title="Log out"
+            aria-label="Log out"
+          >
+            <LogOut size={18} aria-hidden="true" />
+          </button>
+        </nav>
+      </header>
 
-      <section className="grid gap-5 lg:grid-cols-[1fr_1.3fr]">
-        <form onSubmit={submitEvent} className="glass-card rounded-3xl p-5">
-          <h2 className="text-3xl text-white">Record Event</h2>
-          <div className="mt-4 space-y-3 text-sm">
-            <select
-              value={selectedTeam}
-              onChange={(e) => {
-                setSelectedTeam(e.target.value as "A" | "B");
-                setPlayerName("");
-              }}
-              className="w-full rounded-lg border border-white/20 bg-black/25 px-3 py-2 text-white"
+      {/* Main Content Area */}
+      <div className="flex-1">
+        <AnimatePresence mode="wait">
+          {activeTab === "overview" && (
+            <motion.div
+              key="overview"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="grid gap-6 md:grid-cols-2"
             >
-              {data.teams.map((team) => (
-                <option key={team.key} value={team.key}>
-                  {team.name}
-                </option>
-              ))}
-            </select>
+              <section className="glass-pane rounded-[2rem] p-8" aria-labelledby="clock-sync-title">
+                <h2 id="clock-sync-title" className="mb-6 flex items-center gap-3 text-xl font-bold text-white uppercase">
+                  <Clock className="text-emerald-500" aria-hidden="true" />
+                  Clock Sync
+                </h2>
+                <div className="space-y-6">
+                  <div className="flex items-center justify-between rounded-2xl bg-black/20 p-6">
+                    <span className="text-4xl font-bold text-white tabular-nums">{data.elapsedMinutes}′</span>
+                    <div className="flex gap-2">
+                       <button 
+                        onClick={() => updateClock(Math.max(0, data.elapsedMinutes - 1))}
+                        aria-label="Decrease minute"
+                        className="h-12 w-12 flex items-center justify-center rounded-xl bg-white/5 hover:bg-white/10 text-white transition-all active:scale-95"
+                      >
+                        <Minus size={20} />
+                      </button>
+                      <button 
+                         onClick={() => updateClock(Math.min(data.slotMinutes, data.elapsedMinutes + 1))}
+                         aria-label="Increase minute"
+                        className="h-12 w-12 flex items-center justify-center rounded-xl bg-emerald-500 text-black transition-all active:scale-95 shadow-lg shadow-emerald-500/10"
+                      >
+                        <Plus size={20} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </section>
 
-            <select
-              value={playerName}
-              onChange={(e) => setPlayerName(e.target.value)}
-              className="w-full rounded-lg border border-white/20 bg-black/25 px-3 py-2 text-white"
-            >
-              <option value="">Select player</option>
-              {players.map((player) => (
-                <option key={player.name} value={player.name}>
-                  {player.name}
-                </option>
-              ))}
-            </select>
+              <section className="glass-pane rounded-[2rem] p-8" aria-labelledby="kickoff-schedule-title">
+                <h2 id="kickoff-schedule-title" className="mb-6 flex items-center gap-3 text-xl font-bold text-white uppercase">
+                  <Calendar className="text-emerald-500" aria-hidden="true" />
+                  Scheduled Kickoff
+                </h2>
+                <div className="space-y-4">
+                  <div className="relative">
+                    <input
+                      type="datetime-local"
+                      value={(() => {
+                        try {
+                          const date = data.kickoffTime ? new Date(data.kickoffTime) : new Date();
+                          if (isNaN(date.getTime())) return new Date().toISOString().slice(0, 16);
+                          return new Date(date.getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+                        } catch (e) {
+                          return new Date().toISOString().slice(0, 16);
+                        }
+                      })()}
+                      onChange={(e) => {
+                        try {
+                          const newTime = new Date(e.target.value).toISOString();
+                          patchMatch({ action: "setKickoffTime", kickoffTime: newTime })
+                            .then(() => {
+                              setMessage("Kickoff time updated.");
+                              mutate();
+                            })
+                            .catch(() => setMessage("Failed to update schedule."));
+                        } catch (err) {
+                          setMessage("Invalid date selection.");
+                        }
+                      }}
+                      className="w-full rounded-xl border border-white/5 bg-black/40 px-4 py-3 text-white outline-none focus:border-emerald-500/30 transition-all font-bold"
+                    />
+                  </div>
+                  <p className="text-[10px] font-bold text-white/20 uppercase tracking-[0.2em] ml-2">UTC+6 Bangladesh Standard Time</p>
+                </div>
+              </section>
 
-            <div className="grid grid-cols-2 gap-2">
-              <select
-                value={eventType}
-                onChange={(e) => setEventType(e.target.value as "goal" | "foul" | "yellow" | "red")}
-                className="rounded-lg border border-white/20 bg-black/25 px-3 py-2 text-white"
-              >
-                <option value="goal">Goal</option>
-                <option value="foul">Foul</option>
-                <option value="yellow">Yellow Card</option>
-                <option value="red">Red Card</option>
-              </select>
-              <input
-                type="number"
-                min={0}
-                max={90}
-                value={minute}
-                onChange={(e) => setMinute(Number(e.target.value))}
-                className="rounded-lg border border-white/20 bg-black/25 px-3 py-2 text-white"
-              />
-            </div>
-
-            <button className="w-full rounded-xl bg-orange-400 px-4 py-2 font-semibold text-black">Add Event</button>
-          </div>
-        </form>
-
-        <div className="glass-card rounded-3xl p-5">
-          <h2 className="text-3xl text-white">Lineup Manager</h2>
-          <p className="mb-4 text-sm text-white/70">Pick exactly 6 starters including 1 goalkeeper per team.</p>
-
-          <div className="grid gap-4 md:grid-cols-2">
-            {data.teams.map((team) => (
-              <div key={team.key} className="rounded-2xl border border-white/15 bg-black/20 p-4">
-                <p className="text-2xl text-white">{team.name}</p>
-                <div className="mt-3 space-y-2 text-sm">
-                  {team.players.map((player) => (
-                    <div key={player.name} className="flex items-center gap-2 rounded-lg border border-white/10 px-2 py-1 text-white">
-                      <span className="min-w-20">{player.name}</span>
-                      <label className="ml-auto flex items-center gap-1 text-xs">
-                        <input
-                          type="checkbox"
-                          checked={player.isStarter}
-                          onChange={(e) => {
-                            const updated = data.teams.map((item) => {
-                              if (item.key !== team.key) return item;
-                              return {
-                                ...item,
-                                players: item.players.map((p) =>
-                                  p.name === player.name ? { ...p, isStarter: e.target.checked } : p,
-                                ),
-                              };
-                            });
-                            mutate({ ...data, teams: updated }, false);
-                          }}
-                        />
-                        Starter
-                      </label>
-
-                      <label className="flex items-center gap-1 text-xs">
-                        <input
-                          type="radio"
-                          name={`gk-${team.key}`}
-                          checked={player.isGoalkeeper}
-                          onChange={(e) => {
-                            if (!e.target.checked) return;
-                            const updated = data.teams.map((item) => {
-                              if (item.key !== team.key) return item;
-                              return {
-                                ...item,
-                                players: item.players.map((p) => ({
-                                  ...p,
-                                  isGoalkeeper: p.name === player.name,
-                                })),
-                              };
-                            });
-                            mutate({ ...data, teams: updated }, false);
-                          }}
-                        />
-                        GK
-                      </label>
+              <section className="glass-pane rounded-[2rem] p-8" aria-labelledby="live-scores-title">
+                 <h2 id="live-scores-title" className="mb-6 flex items-center gap-3 text-xl font-bold text-white uppercase">
+                  <Activity className="text-emerald-500" size={20} aria-hidden="true" />
+                  Live Scores
+                </h2>
+                <div className="grid gap-4">
+                  {data.teams.map(team => (
+                    <div key={team.key} className="flex items-center justify-between rounded-2xl bg-black/20 p-4">
+                      <div className="flex items-center gap-4">
+                         <div className={`h-3 w-3 rounded-full ${team.key === 'A' ? 'bg-emerald-500 shadow-[0_0_8px_#10b981]' : 'bg-amber-500 shadow-[0_0_8px_#f59e0b]'}`} />
+                         <span className="font-bold text-white">{team.name}</span>
+                      </div>
+                      <div className="flex items-center gap-4 text-white">
+                        <span className="text-3xl font-bold tabular-nums">{team.score}</span>
+                        <div className="flex gap-1">
+                          <button 
+                            onClick={() => updateScore(team.key, team.score - 1)}
+                            className="h-8 w-8 flex items-center justify-center rounded-lg bg-white/5 hover:bg-white/10 text-white/50 hover:text-white transition-all active:scale-90"
+                          >
+                            <Minus size={14} />
+                          </button>
+                          <button 
+                            onClick={() => updateScore(team.key, team.score + 1)}
+                            className="h-8 w-8 flex items-center justify-center rounded-lg bg-white/5 hover:bg-white/10 text-white/50 hover:text-white transition-all active:scale-90"
+                          >
+                            <Plus size={14} />
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   ))}
                 </div>
+              </section>
+            </motion.div>
+          )}
 
-                <button
-                  onClick={() => saveLineup(team)}
-                  className="mt-3 w-full rounded-lg border border-white/20 bg-emerald-500/80 px-3 py-2 text-sm font-semibold text-black"
-                >
-                  Save {team.name} Lineup
+          {activeTab === "events" && (
+            <motion.div
+              key="events"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="glass-pane rounded-[2rem] p-8 max-w-2xl mx-auto"
+            >
+              <h2 className="mb-6 text-xl font-bold text-white uppercase">Log Match Event</h2>
+              <form onSubmit={submitEvent} className="space-y-6">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-white/40 ml-2">Active Team</label>
+                    <div className="flex gap-2 p-1 rounded-xl bg-black/40">
+                      {data.teams.map(t => (
+                        <button
+                          key={t.key}
+                          type="button"
+                          onClick={() => {
+                            setSelectedTeam(t.key);
+                            setPlayerName("");
+                          }}
+                          className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
+                            selectedTeam === t.key ? "bg-white/10 text-white shadow-lg" : "text-white/40 hover:text-white/60"
+                          }`}
+                        >
+                          {t.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-white/40 ml-2">Minute</label>
+                    <input
+                      type="number"
+                      value={minute}
+                      onChange={(e) => setMinute(parseInt(e.target.value))}
+                      className="w-full rounded-xl border border-white/5 bg-black/40 px-4 py-2.5 text-white outline-none focus:border-emerald-500/30 transition-all font-bold tabular-nums"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-white/40 ml-2">Involved Player</label>
+                  <select
+                    value={playerName}
+                    onChange={(e) => setPlayerName(e.target.value)}
+                    className="w-full rounded-xl border border-white/5 bg-black/40 px-4 py-2.5 text-white outline-none focus:border-emerald-500/30 transition-all font-bold appearance-none cursor-pointer"
+                  >
+                    <option value="">Select a player...</option>
+                    {players.map((p) => (
+                      <option key={p.name} value={p.name}>{p.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-2">
+                   <label className="text-[10px] font-bold uppercase tracking-widest text-white/40 ml-2">Outcome</label>
+                   <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                      {[
+                        { id: 'goal', color: 'bg-emerald-500', label: 'Goal' },
+                        { id: 'assist', color: 'bg-indigo-500', label: 'Assist' },
+                        { id: 'foul', color: 'bg-amber-500', label: 'Foul' },
+                        { id: 'yellow', color: 'bg-sky-500', label: 'Yellow' },
+                        { id: 'red', color: 'bg-rose-500', label: 'Red' },
+                      ].map(type => (
+                        <button
+                          key={type.id}
+                          type="button"
+                          onClick={() => setEventType(type.id as any)}
+                          className={`py-3 rounded-xl border-2 transition-all flex flex-col items-center gap-1 ${
+                            eventType === type.id 
+                            ? `bg-white/10 border-emerald-500 text-white` 
+                            : 'bg-black/20 border-transparent text-white/40 hover:border-white/10'
+                          }`}
+                        >
+                          <div className={`h-2 w-full max-w-[20px] rounded-full ${type.color}`} />
+                          <span className="text-[10px] font-bold uppercase">{type.label}</span>
+                        </button>
+                      ))}
+                   </div>
+                </div>
+
+                <button className="w-full rounded-2xl bg-emerald-500 py-4 font-bold text-black shadow-[0_0_20px_rgba(16,185,129,0.3)] transition-all hover:shadow-[0_0_30px_rgba(16,185,129,0.5)] active:scale-[0.98]">
+                  Append Event
                 </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
+              </form>
 
-      {message ? <p className="rounded-xl border border-white/15 bg-black/20 px-3 py-2 text-sm text-white">{message}</p> : null}
+              <div className="mt-8 pt-8 border-t border-white/5 space-y-4">
+                <h3 className="text-xs font-bold text-white/40 uppercase tracking-widest ml-2">Session Timeline</h3>
+                <div className="flex flex-col gap-3">
+                  {data.events.length === 0 ? (
+                    <p className="text-center text-xs font-bold text-white/20 uppercase py-4">No events recorded</p>
+                  ) : (
+                    data.events.map((event) => (
+                      <div key={event._id} className="flex items-center justify-between rounded-xl bg-black/40 p-3 border border-white/5">
+                        <div className="flex items-center gap-3">
+                          <span className="flex h-6 w-6 items-center justify-center rounded bg-emerald-500/10 text-[10px] font-black text-emerald-500">
+                            {event.minute}'
+                          </span>
+                          <div>
+                            <p className="text-[10px] font-black text-white uppercase">{event.playerName}</p>
+                            <p className="text-[8px] font-bold text-white/40 uppercase tracking-widest">{event.type}</p>
+                          </div>
+                        </div>
+                        <button 
+                          onClick={() => removeMatchEvent(event._id!)}
+                          className="rounded-lg p-2 text-rose-500/40 hover:bg-rose-500/10 hover:text-rose-500 transition-colors"
+                          title="Remove Event (Reverts Stats)"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </motion.div>
+          )}
+
+          {activeTab === "lineup" && (
+            <motion.div
+              key="lineup"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="grid gap-6 lg:grid-cols-2"
+            >
+              {data.teams.map(team => (
+                <div key={team.key} className="glass-pane rounded-[2rem] p-8">
+                  <div className="mb-8 flex items-center justify-between">
+                    <div>
+                      <h3 className="text-xl font-bold text-white uppercase">{team.name} Squad</h3>
+                      <p className="text-[10px] font-bold text-white/40 uppercase tracking-widest mt-1">
+                        {team.players.filter(p => p.isStarter).length}/6 Starters Selected
+                      </p>
+                    </div>
+                    <button 
+                      onClick={() => saveLineup(team)}
+                      className="flex items-center gap-2 rounded-xl bg-emerald-500/10 px-4 py-2 text-xs font-bold text-emerald-500 transition-all hover:bg-emerald-500/20"
+                    >
+                      <Save size={14} />
+                      Confirm XI
+                    </button>
+                  </div>
+
+                  <div className="mb-8 p-1 rounded-[2.5rem] bg-black/40 border border-white/5 relative group">
+                    <div className="absolute top-4 left-4 z-10 flex items-center gap-2 rounded-full bg-black/60 px-3 py-1.5 text-[8px] font-bold text-white/40 border border-white/10 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <MousePointer2 size={10} className="text-emerald-500" />
+                      DRAG PLAYERS TO POSITION
+                    </div>
+                    <TacticalCanvas 
+                      teamA={data.teams[0]} 
+                      teamB={data.teams[1]} 
+                      isEditable={true} 
+                      onPlayerPositionChange={handlePlayerPositionChange}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    {team.players.map(player => (
+                      <div key={player.name} className="flex items-center gap-4 rounded-2xl bg-black/20 p-4 transition-colors hover:bg-black/30 group">
+                        <div className="flex-1">
+                          <p className="font-bold text-white text-sm">{player.name}</p>
+                          <div className="mt-2 flex gap-4">
+                             <div className="flex flex-col gap-1">
+                               <span className="text-[7px] font-black text-white/20 uppercase tracking-widest">Goals</span>
+                               <div className="flex items-center gap-2">
+                                 <button 
+                                   onClick={(e) => { e.stopPropagation(); updatePlayerStatInline(team.key, player.name, "goals", false); }}
+                                   className="h-5 w-5 rounded bg-white/5 flex items-center justify-center text-white/40 hover:bg-rose-500/20 hover:text-rose-500 transition-colors"
+                                 >
+                                   -
+                                 </button>
+                                 <span className="text-[10px] font-black text-emerald-500 w-3 text-center">{player.goals}</span>
+                                 <button 
+                                   onClick={(e) => { e.stopPropagation(); updatePlayerStatInline(team.key, player.name, "goals", true); }}
+                                   className="h-5 w-5 rounded bg-white/5 flex items-center justify-center text-white/40 hover:bg-emerald-500/20 hover:text-emerald-500 transition-colors"
+                                 >
+                                   +
+                                 </button>
+                               </div>
+                             </div>
+                             <div className="flex flex-col gap-1">
+                               <span className="text-[7px] font-black text-white/20 uppercase tracking-widest">Assists</span>
+                               <div className="flex items-center gap-2">
+                                 <button 
+                                   onClick={(e) => { e.stopPropagation(); updatePlayerStatInline(team.key, player.name, "assists", false); }}
+                                   className="h-5 w-5 rounded bg-white/5 flex items-center justify-center text-white/40 hover:bg-rose-500/20 hover:text-rose-500 transition-colors"
+                                 >
+                                   -
+                                 </button>
+                                 <span className="text-[10px] font-black text-indigo-400 w-3 text-center">{player.assists}</span>
+                                 <button 
+                                   onClick={(e) => { e.stopPropagation(); updatePlayerStatInline(team.key, player.name, "assists", true); }}
+                                   className="h-5 w-5 rounded bg-white/5 flex items-center justify-center text-white/40 hover:bg-indigo-500/20 hover:text-indigo-400 transition-colors"
+                                 >
+                                   +
+                                 </button>
+                               </div>
+                             </div>
+                          </div>
+                        </div>
+                        
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => {
+                              const updated = data.teams.map(t => {
+                                if (t.key !== team.key) return t;
+                                return {
+                                  ...t,
+                                  players: t.players.map(p => p.name === player.name ? { ...p, isStarter: !p.isStarter } : p)
+                                };
+                              });
+                              mutate({ ...data, teams: updated }, false);
+                            }}
+                            className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase transition-all ${
+                              player.isStarter ? "bg-emerald-500 text-black shadow-lg shadow-emerald-500/20" : "bg-white/5 text-white/40 hover:text-white/60"
+                            }`}
+                          >
+                            Starter
+                          </button>
+                          
+                          <button
+                            onClick={() => {
+                              const updated = data.teams.map(t => {
+                                if (t.key !== team.key) return t;
+                                return {
+                                  ...t,
+                                  players: t.players.map(p => ({ ...p, isGoalkeeper: p.name === player.name ? !p.isGoalkeeper : false }))
+                                };
+                              });
+                              mutate({ ...data, teams: updated }, false);
+                            }}
+                            className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase transition-all ${
+                              player.isGoalkeeper ? "bg-amber-500 text-black shadow-lg shadow-amber-500/20" : "bg-white/5 text-white/40 hover:text-white/60"
+                            }`}
+                          >
+                            GK
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+
+      {/* Persistent Notification Area */}
+      <AnimatePresence>
+        {message && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9, y: 50 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.9 }}
+            className="fixed bottom-8 left-1/2 -translate-x-1/2 glass-pane rounded-2xl px-6 py-4 flex items-center gap-3 border-emerald-500/30 text-emerald-400 font-bold z-50 shadow-2xl"
+          >
+            <div className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-500 text-black">
+              <CheckCircle2 size={16} />
+            </div>
+            {message}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </main>
   );
 }
+

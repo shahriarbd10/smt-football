@@ -1,5 +1,5 @@
 export type TeamKey = "A" | "B";
-export type EventType = "goal" | "foul" | "yellow" | "red";
+export type EventType = "goal" | "assist" | "foul" | "yellow" | "red";
 
 export type Player = {
   name: string;
@@ -9,6 +9,8 @@ export type Player = {
   fouls: number;
   yellowCards: number;
   redCards: number;
+  assists: number;
+  position?: { x: number; y: number };
 };
 
 export type Team = {
@@ -28,6 +30,7 @@ export type MatchEvent = {
   playerName: string;
   type: EventType;
   createdAt: string;
+  _id?: string;
 };
 
 export type MatchData = {
@@ -38,6 +41,7 @@ export type MatchData = {
   teams: Team[];
   events: MatchEvent[];
   updatedAt: string;
+  kickoffTime: string;
 };
 
 const makePlayer = (
@@ -52,6 +56,7 @@ const makePlayer = (
   fouls: 0,
   yellowCards: 0,
   redCards: 0,
+  assists: 0,
 });
 
 export const defaultMatch: Omit<MatchData, "updatedAt"> = {
@@ -101,4 +106,5 @@ export const defaultMatch: Omit<MatchData, "updatedAt"> = {
     },
   ],
   events: [],
+  kickoffTime: "2026-04-08T18:00:00+06:00",
 };

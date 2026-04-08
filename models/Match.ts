@@ -9,6 +9,11 @@ const PlayerSchema = new Schema(
     fouls: { type: Number, default: 0 },
     yellowCards: { type: Number, default: 0 },
     redCards: { type: Number, default: 0 },
+    assists: { type: Number, default: 0 },
+    position: {
+      x: { type: Number },
+      y: { type: Number },
+    },
   },
   { _id: false },
 );
@@ -34,12 +39,12 @@ const MatchEventSchema = new Schema(
     playerName: { type: String, required: true },
     type: {
       type: String,
-      enum: ["goal", "foul", "yellow", "red"],
+      enum: ["goal", "assist", "foul", "yellow", "red"],
       required: true,
     },
     createdAt: { type: Date, default: Date.now },
   },
-  { _id: false },
+  { _id: true },
 );
 
 const MatchSchema = new Schema(
@@ -50,6 +55,7 @@ const MatchSchema = new Schema(
     elapsedMinutes: { type: Number, required: true, default: 0 },
     teams: { type: [TeamSchema], default: [] },
     events: { type: [MatchEventSchema], default: [] },
+    kickoffTime: { type: Date, default: () => new Date("2026-04-08T18:00:00+06:00") },
   },
   { timestamps: true },
 );

@@ -16,6 +16,11 @@ const bodyFont = Manrope({
 export const metadata: Metadata = {
   title: "SMT Football Tournament",
   description: "Live futsal session dashboard and admin control panel",
+  icons: {
+    icon: "/favicon.png",
+    shortcut: "/favicon.png",
+    apple: "/favicon.png",
+  },
 };
 
 export default function RootLayout({
