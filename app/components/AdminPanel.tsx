@@ -25,6 +25,7 @@ import {
   UserPlus
 } from "lucide-react";
 import { TacticalCanvas } from "./shared/TacticalCanvas";
+import PhotoGallery from "./PhotoGallery";
 
 type Player = {
   name: string;
@@ -1067,6 +1068,14 @@ export default function AdminPanel() {
                     ) : null}
                   </div>
                 )}
+              </section>
+
+              <section className="glass-pane rounded-[2rem] p-8 md:col-span-2" aria-labelledby="gallery-control-title">
+                <h2 id="gallery-control-title" className="mb-6 flex items-center gap-3 text-xl font-bold text-white uppercase">
+                  <CalendarDays className="text-emerald-500" size={20} aria-hidden="true" />
+                  Public Gallery Management
+                </h2>
+                <PhotoGallery mode="admin" />
               </section>
             </motion.div>
           )}

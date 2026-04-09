@@ -1,21 +1,73 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Camera, Upload, X, Image as ImageIcon, CheckCircle2, AlertCircle, Loader2, Download } from "lucide-react";
+import {
+  Camera,
+  Upload,
+  X,
+  Image as ImageIcon,
+  CheckCircle2,
+  AlertCircle,
+  Loader2,
+  Download,
+  Trash2,
+  ZoomIn,
+  ZoomOut,
+  RotateCcw,
+} from "lucide-react";
 import useSWR from "swr";
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
-export default function PhotoGallery() {
+type PhotoItem = {
+  _id?: string;
+  url: string;
+  publicId?: string;
+};
+
+type PhotoGalleryProps = {
+  mode?: "public" | "admin";
+};
+
+export default function PhotoGallery({ mode = "public" }: PhotoGalleryProps) {
+  const isAdmin = mode === "admin";
   const { data: photos, mutate } = useSWR("/api/photos", fetcher, { refreshInterval: 10000 });
   const [uploading, setUploading] = useState(false);
   const [showUpload, setShowUpload] = useState(false);
-  const [selectedPhoto, setSelectedPhoto] = useState<string | null>(null);
+  const [selectedPhoto, setSelectedPhoto] = useState<PhotoItem | null>(null);
   const [downloading, setDownloading] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [zoomLevel, setZoomLevel] = useState(1);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
-  const photoList = Array.isArray(photos) ? photos : [];
+  const photoList: PhotoItem[] = Array.isArray(photos) ? photos : [];
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!selectedPhoto) return;
+
+      if (event.key === "Escape") {
+        setSelectedPhoto(null);
+        return;
+      }
+
+      if (event.key === "+" || event.key === "=") {
+        setZoomLevel((prev) => Math.min(4, Number((prev + 0.2).toFixed(2))));
+      }
+
+      if (event.key === "-") {
+        setZoomLevel((prev) => Math.max(1, Number((prev - 0.2).toFixed(2))));
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [selectedPhoto]);
+
+  useEffect(() => {
+    setZoomLevel(1);
+  }, [selectedPhoto]);
 
   async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -105,24 +157,66 @@ export default function PhotoGallery() {
     }
   }
 
+  async function handleDelete(photo: PhotoItem) {
+    if (!photo._id && !photo.publicId) {
+      setMessage({ type: "error", text: "Could not identify photo to delete." });
+      return;
+    }
+
+    const confirmed = window.confirm("Delete this image from gallery?");
+    if (!confirmed) return;
+
+    try {
+      setDeletingId(photo._id || photo.publicId || null);
+      const response = await fetch("/api/photos", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: photo._id, publicId: photo.publicId }),
+      });
+
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload?.error || "Delete failed");
+      }
+
+      if (selectedPhoto && (selectedPhoto._id === photo._id || selectedPhoto.publicId === photo.publicId)) {
+        setSelectedPhoto(null);
+      }
+
+      setMessage({ type: "success", text: "Image deleted successfully." });
+      await mutate();
+    } catch (err: any) {
+      setMessage({ type: "error", text: err?.message || "Delete failed" });
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
+  function closeModal() {
+    setSelectedPhoto(null);
+    setZoomLevel(1);
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h3 className="flex items-center gap-3 text-2xl font-bold text-white uppercase">
           <Camera className="text-emerald-400" size={24} />
-          Session Gallery
+          {isAdmin ? "Gallery Control Room" : "Session Gallery"}
         </h3>
-        <button
-          onClick={() => setShowUpload(!showUpload)}
-          className="flex items-center gap-2 rounded-xl bg-emerald-500/10 px-4 py-2 text-xs font-bold text-emerald-500 transition-all hover:bg-emerald-500/20"
-        >
-          {showUpload ? <X size={14} /> : <Upload size={14} />}
-          {showUpload ? "Cancel" : "Upload Moment"}
-        </button>
+        {isAdmin ? (
+          <button
+            onClick={() => setShowUpload(!showUpload)}
+            className="flex items-center gap-2 rounded-xl bg-emerald-500/10 px-4 py-2 text-xs font-bold text-emerald-500 transition-all hover:bg-emerald-500/20"
+          >
+            {showUpload ? <X size={14} /> : <Upload size={14} />}
+            {showUpload ? "Cancel" : "Upload Moment"}
+          </button>
+        ) : null}
       </div>
 
       <AnimatePresence>
-        {showUpload && (
+        {showUpload && isAdmin && (
           <motion.div
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: "auto", opacity: 1 }}
@@ -182,7 +276,7 @@ export default function PhotoGallery() {
             <p className="text-xs uppercase font-bold tracking-widest">No moments captured yet</p>
           </div>
         ) : (
-          photoList.map((photo: any, idx: number) => (
+          photoList.map((photo: PhotoItem, idx: number) => (
             <motion.div
               key={photo._id ?? `${photo.publicId ?? photo.url}-${idx}`}
               initial={{ opacity: 0, scale: 0.9 }}
@@ -190,8 +284,28 @@ export default function PhotoGallery() {
               transition={{ delay: idx * 0.05 }}
               whileHover={{ scale: 1.02, zIndex: 10 }}
               className="group relative aspect-video cursor-zoom-in overflow-hidden rounded-2xl bg-black/40 ring-1 ring-white/10 hover:ring-emerald-500/30 transition-all shadow-xl hover:shadow-emerald-500/5"
-              onClick={() => setSelectedPhoto(photo.url)}
+              onClick={() => setSelectedPhoto(photo)}
             >
+              {isAdmin ? (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDelete(photo);
+                  }}
+                  disabled={deletingId === (photo._id || photo.publicId)}
+                  className="absolute right-2 top-2 z-20 rounded-full bg-black/70 p-2 text-rose-300 hover:bg-rose-500/20 disabled:opacity-60"
+                  title="Delete image"
+                  aria-label="Delete image"
+                >
+                  {deletingId === (photo._id || photo.publicId) ? (
+                    <Loader2 size={14} className="animate-spin" />
+                  ) : (
+                    <Trash2 size={14} />
+                  )}
+                </button>
+              ) : null}
+
               <img
                 src={photo.url}
                 alt="Match Moment"
@@ -213,17 +327,17 @@ export default function PhotoGallery() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4"
-            onClick={() => setSelectedPhoto(null)}
+            onClick={closeModal}
           >
             <motion.div
               initial={{ scale: 0.92, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.92, opacity: 0 }}
-              className="relative max-h-[90vh] w-full max-w-5xl"
+              className="relative max-h-[90vh] w-full max-w-6xl"
               onClick={(e) => e.stopPropagation()}
             >
               <button
-                onClick={() => handleDownload(selectedPhoto)}
+                onClick={() => handleDownload(selectedPhoto.url)}
                 disabled={downloading}
                 className="absolute left-3 top-3 z-10 flex items-center gap-2 rounded-full bg-emerald-500 px-3 py-2 text-xs font-bold text-black disabled:opacity-70"
                 aria-label="Download image"
@@ -231,18 +345,72 @@ export default function PhotoGallery() {
                 <Download size={14} />
                 {downloading ? "Downloading" : "Download"}
               </button>
+
+              {isAdmin ? (
+                <button
+                  type="button"
+                  onClick={() => handleDelete(selectedPhoto)}
+                  className="absolute left-40 top-3 z-10 flex items-center gap-2 rounded-full bg-rose-500 px-3 py-2 text-xs font-bold text-black"
+                  aria-label="Delete image"
+                >
+                  <Trash2 size={14} />
+                  Delete
+                </button>
+              ) : null}
+
+              <div className="absolute left-3 top-14 z-10 flex items-center gap-1 rounded-full bg-black/70 p-1">
+                <button
+                  type="button"
+                  onClick={() => setZoomLevel((prev) => Math.max(1, Number((prev - 0.2).toFixed(2))))}
+                  className="rounded-full p-2 text-white hover:bg-white/10"
+                  aria-label="Zoom out"
+                >
+                  <ZoomOut size={14} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setZoomLevel(1)}
+                  className="rounded-full p-2 text-white hover:bg-white/10"
+                  aria-label="Reset zoom"
+                >
+                  <RotateCcw size={14} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setZoomLevel((prev) => Math.min(4, Number((prev + 0.2).toFixed(2))))}
+                  className="rounded-full p-2 text-white hover:bg-white/10"
+                  aria-label="Zoom in"
+                >
+                  <ZoomIn size={14} />
+                </button>
+                <span className="px-2 text-[10px] font-bold text-white/80">{Math.round(zoomLevel * 100)}%</span>
+              </div>
+
               <button
-                onClick={() => setSelectedPhoto(null)}
+                onClick={closeModal}
                 className="absolute right-3 top-3 z-10 rounded-full bg-black/70 p-2 text-white"
                 aria-label="Close preview"
               >
                 <X size={16} />
               </button>
-              <img
-                src={selectedPhoto}
-                alt="Gallery preview"
-                className="max-h-[90vh] w-full rounded-2xl object-contain"
-              />
+              <div
+                className="max-h-[90vh] overflow-auto rounded-2xl bg-black/40"
+                onWheel={(e) => {
+                  if (!e.ctrlKey) return;
+                  e.preventDefault();
+                  setZoomLevel((prev) => {
+                    const next = e.deltaY > 0 ? prev - 0.1 : prev + 0.1;
+                    return Math.min(4, Math.max(1, Number(next.toFixed(2))));
+                  });
+                }}
+              >
+                <img
+                  src={selectedPhoto.url}
+                  alt="Gallery preview"
+                  className="mx-auto max-h-[90vh] w-full rounded-2xl object-contain transition-transform duration-200"
+                  style={{ transform: `scale(${zoomLevel})`, transformOrigin: "center center" }}
+                />
+              </div>
             </motion.div>
           </motion.div>
         )}
