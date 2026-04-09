@@ -334,12 +334,14 @@ export default function PhotoGallery({ mode = "public" }: PhotoGalleryProps) {
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.92, opacity: 0 }}
               className="relative max-h-[90vh] w-full max-w-6xl"
-              onClick={(e) => e.stopPropagation()}
             >
-              <button
-                onClick={() => handleDownload(selectedPhoto.url)}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDownload(selectedPhoto.url);
+                  }}
                 disabled={downloading}
-                className="absolute left-3 top-3 z-10 flex items-center gap-2 rounded-full bg-emerald-500 px-3 py-2 text-xs font-bold text-black disabled:opacity-70"
+                  className="absolute right-3 top-14 z-20 flex items-center gap-2 rounded-full bg-white/95 px-3 py-2 text-xs font-bold text-black shadow-xl ring-1 ring-black/30 backdrop-blur disabled:opacity-70"
                 aria-label="Download image"
               >
                 <Download size={14} />
@@ -349,8 +351,11 @@ export default function PhotoGallery({ mode = "public" }: PhotoGalleryProps) {
               {isAdmin ? (
                 <button
                   type="button"
-                  onClick={() => handleDelete(selectedPhoto)}
-                  className="absolute left-40 top-3 z-10 flex items-center gap-2 rounded-full bg-rose-500 px-3 py-2 text-xs font-bold text-black"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDelete(selectedPhoto);
+                    }}
+                    className="absolute right-3 top-25 z-20 flex items-center gap-2 rounded-full bg-rose-500/95 px-3 py-2 text-xs font-bold text-black shadow-xl ring-1 ring-black/30 backdrop-blur"
                   aria-label="Delete image"
                 >
                   <Trash2 size={14} />
@@ -358,7 +363,10 @@ export default function PhotoGallery({ mode = "public" }: PhotoGalleryProps) {
                 </button>
               ) : null}
 
-              <div className="absolute left-3 top-14 z-10 flex items-center gap-1 rounded-full bg-black/70 p-1">
+                <div
+                  className="absolute left-3 top-3 z-20 flex items-center gap-1 rounded-full bg-black/80 p-1 ring-1 ring-white/15 backdrop-blur"
+                  onClick={(e) => e.stopPropagation()}
+                >
                 <button
                   type="button"
                   onClick={() => setZoomLevel((prev) => Math.max(1, Number((prev - 0.2).toFixed(2))))}
@@ -387,14 +395,18 @@ export default function PhotoGallery({ mode = "public" }: PhotoGalleryProps) {
               </div>
 
               <button
-                onClick={closeModal}
-                className="absolute right-3 top-3 z-10 rounded-full bg-black/70 p-2 text-white"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  closeModal();
+                }}
+                className="absolute right-3 top-3 z-20 rounded-full bg-black/85 p-2 text-white shadow-xl ring-1 ring-white/20"
                 aria-label="Close preview"
               >
                 <X size={16} />
               </button>
               <div
                 className="max-h-[90vh] overflow-auto rounded-2xl bg-black/40"
+                onClick={(e) => e.stopPropagation()}
                 onWheel={(e) => {
                   if (!e.ctrlKey) return;
                   e.preventDefault();
