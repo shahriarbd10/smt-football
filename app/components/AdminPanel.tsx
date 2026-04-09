@@ -151,6 +151,7 @@ export default function AdminPanel() {
   const [eventSlotDraft, setEventSlotDraft] = useState("90");
   const [eventTotalSlotFeeDraft, setEventTotalSlotFeeDraft] = useState("0");
   const [eventNotesDraft, setEventNotesDraft] = useState("");
+  const [paidAmountDrafts, setPaidAmountDrafts] = useState<Record<string, string>>({});
   const [kickoffDraft, setKickoffDraft] = useState("");
   const [selectedUpcomingEventId, setSelectedUpcomingEventId] = useState("");
   const [selectedHistoryMatchId, setSelectedHistoryMatchId] = useState("");
@@ -236,6 +237,23 @@ export default function AdminPanel() {
     if (!selectedHistoryMatchId) return data.matchHistory[0];
     return data.matchHistory.find((item) => item.id === selectedHistoryMatchId) || data.matchHistory[0];
   }, [data?.matchHistory, selectedHistoryMatchId]);
+
+  useEffect(() => {
+    if (!selectedUpcomingEvent) {
+      setPaidAmountDrafts({});
+      return;
+    }
+
+    const nextDrafts: Record<string, string> = {};
+    data?.members.forEach((member) => {
+      const participant =
+        selectedUpcomingEvent.participants.find((item) => item.memberId === member.id) ||
+        ({ paidAmount: 0 } as UpcomingEventMemberStatus);
+      nextDrafts[`${selectedUpcomingEvent.id}:${member.id}`] = String(participant.paidAmount ?? 0);
+    });
+
+    setPaidAmountDrafts(nextDrafts);
+  }, [selectedUpcomingEvent?.id, data?.members, selectedUpcomingEvent?.participants]);
 
   useEffect(() => {
     if (!data?.kickoffTime) return;
@@ -1837,12 +1855,25 @@ export default function AdminPanel() {
                             type="number"
                             min={0}
                             step="0.01"
-                            value={participant.paidAmount ?? 0}
-                            onChange={(e) =>
-                              setMemberAttendanceStatus(selectedUpcomingEvent.id, member.id, {
-                                paidAmount: Number(e.target.value),
-                              })
-                            }
+                            value={paidAmountDrafts[`${selectedUpcomingEvent.id}:${member.id}`] ?? String(participant.paidAmount ?? 0)}
+                            onChange={(e) => {
+                              const key = `${selectedUpcomingEvent.id}:${member.id}`;
+                              setPaidAmountDrafts((prev) => ({ ...prev, [key]: e.target.value }));
+                            }}
+                            onBlur={(e) => {
+                              const value = Number(e.target.value);
+                              if (Number.isNaN(value)) {
+                                const key = `${selectedUpcomingEvent.id}:${member.id}`;
+                                setPaidAmountDrafts((prev) => ({ ...prev, [key]: String(participant.paidAmount ?? 0) }));
+                                return;
+                              }
+
+                              if (value !== Number(participant.paidAmount ?? 0)) {
+                                setMemberAttendanceStatus(selectedUpcomingEvent.id, member.id, {
+                                  paidAmount: value,
+                                });
+                              }
+                            }}
                             className="w-28 rounded-lg border border-white/10 bg-black/40 px-2 py-1 text-xs font-bold text-white outline-none focus:border-emerald-500/40"
                             placeholder="Paid"
                           />
