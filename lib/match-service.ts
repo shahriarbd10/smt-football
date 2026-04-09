@@ -189,6 +189,40 @@ function upsertSnapshotFromLive(match: any, snapshotId?: string) {
   }
 }
 
+function syncLatestHistoryLineupFromLive(match: any) {
+  if (!Array.isArray(match.matchHistory) || match.matchHistory.length === 0) {
+    return;
+  }
+
+  const latest = [...match.matchHistory].sort(
+    (a: any, b: any) => new Date(b.kickoffTime).getTime() - new Date(a.kickoffTime).getTime(),
+  )[0];
+
+  if (!latest || !Array.isArray(latest.teams)) {
+    return;
+  }
+
+  (match.teams || []).forEach((liveTeam: any) => {
+    const historyTeam = latest.teams.find((team: any) => team.key === liveTeam.key);
+    if (!historyTeam || !Array.isArray(historyTeam.players)) {
+      return;
+    }
+
+    (liveTeam.players || []).forEach((livePlayer: any) => {
+      const historyPlayer = historyTeam.players.find((player: any) => player.name === livePlayer.name);
+      if (!historyPlayer) {
+        return;
+      }
+
+      historyPlayer.isStarter = Boolean(livePlayer.isStarter);
+      historyPlayer.isGoalkeeper = Boolean(livePlayer.isGoalkeeper);
+      historyPlayer.position = livePlayer.position ? { ...livePlayer.position } : undefined;
+    });
+  });
+
+  latest.updatedAt = new Date();
+}
+
 function resetLiveBoard(match: any) {
   match.elapsedMinutes = 0;
   match.teams.forEach((team: any) => {
@@ -460,6 +494,8 @@ export async function setLineup(
     player.isStarter = starterSet.has(player.name);
     player.isGoalkeeper = player.name === goalkeeper;
   });
+
+  syncLatestHistoryLineupFromLive(match);
 
   await match.save();
   return match.toObject();
@@ -903,6 +939,8 @@ export async function setPlayerPosition(
 
   player.position = { x, y };
 
+  syncLatestHistoryLineupFromLive(match);
+
   await match.save();
   return match.toObject();
 }
@@ -931,6 +969,8 @@ export async function setPlayerPositionsBulk(
 
     player.position = { x: item.x, y: item.y };
   }
+
+  syncLatestHistoryLineupFromLive(match);
 
   await match.save();
   return match.toObject();
