@@ -17,7 +17,8 @@ export async function GET(request: Request) {
 
     const query: Record<string, unknown> = matchId ? { matchId } : {};
     if (!(includePending && isAdmin)) {
-      query.approvalStatus = "approved";
+      // Public feed: show explicitly approved photos and legacy rows without moderation field.
+      query.$or = [{ approvalStatus: "approved" }, { approvalStatus: { $exists: false } }, { approvalStatus: null }];
     }
 
     const photos = await PhotoModel.find(query).sort({ createdAt: -1 }).limit(50).lean();

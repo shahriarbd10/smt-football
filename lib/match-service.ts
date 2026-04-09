@@ -7,6 +7,7 @@ import {
 } from "@/lib/match";
 import { connectToDatabase } from "@/lib/mongodb";
 import { MatchModel } from "@/models/Match";
+import { PhotoModel } from "@/models/Photo";
 import mongoose from "mongoose";
 
 const MATCH_SLUG = defaultMatch.slug;
@@ -279,6 +280,18 @@ export async function endCurrentMatch() {
   const snapshotId = `record-${idSeed.slice(0, 16).replace(/[:T]/g, "-")}`;
 
   upsertSnapshotFromLive(match, snapshotId);
+
+  // Move live gallery moments into this archived match record so galleries stay match-specific.
+  await PhotoModel.updateMany(
+    { matchId: "live" },
+    {
+      $set: {
+        matchId: snapshotId,
+        matchTitle: String(match.title || "Past Match"),
+      },
+    },
+  );
+
   match.matchLifecycle = "ended";
   await match.save();
   return match.toObject();
