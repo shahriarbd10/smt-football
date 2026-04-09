@@ -70,9 +70,73 @@ export function TacticalCanvas({ teamA, teamB, playersPerSide = 6, isEditable, o
           transform: "translate(-50%, -50%)"
         }}
       >
-        <div className="h-7 w-7 rounded-full border border-dashed border-white/35 bg-black/15" />
+        <div className="flex h-7 w-7 items-center justify-center rounded-full border border-dashed border-white/35 bg-black/15 text-[9px] font-bold text-white/55">
+          {index + 1}
+        </div>
       </div>
     ));
+  };
+
+  const snapToNearestPosition = (x: number, y: number, side: "left" | "right") => {
+    const positions = getDefaultPositions(playersPerSide, side);
+
+    let nearest = positions[0];
+    let nearestDistance = Number.POSITIVE_INFINITY;
+
+    positions.forEach((position) => {
+      const dx = position.x - x;
+      const dy = position.y - y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+
+      if (distance < nearestDistance) {
+        nearestDistance = distance;
+        nearest = position;
+      }
+    });
+
+    return nearest;
+  };
+
+  const snapToNearestAvailablePosition = (
+    team: Team,
+    playerName: string,
+    side: "left" | "right",
+    x: number,
+    y: number,
+  ) => {
+    const positions = getDefaultPositions(playersPerSide, side);
+    const starters = team.players.filter((p) => p.isStarter).slice(0, playersPerSide);
+
+    const distances = positions
+      .map((position, index) => ({
+        index,
+        position,
+        distance: Math.hypot(position.x - x, position.y - y),
+      }))
+      .sort((a, b) => a.distance - b.distance);
+
+    const occupied = new Set<number>();
+
+    starters.forEach((starter, starterIndex) => {
+      if (starter.name === playerName) return;
+
+      const fallback = positions[starterIndex] || positions[0];
+      const position = starter.position || fallback;
+
+      const nearest = positions
+        .map((target, targetIndex) => ({
+          targetIndex,
+          distance: Math.hypot(target.x - position.x, target.y - position.y),
+        }))
+        .sort((a, b) => a.distance - b.distance)[0];
+
+      if (nearest) {
+        occupied.add(nearest.targetIndex);
+      }
+    });
+
+    const firstAvailable = distances.find((candidate) => !occupied.has(candidate.index));
+    return firstAvailable?.position || snapToNearestPosition(x, y, side);
   };
 
   const renderPlayers = (team: Team, side: "left" | "right", color: string) => {
@@ -102,7 +166,10 @@ export function TacticalCanvas({ teamA, teamB, playersPerSide = 6, isEditable, o
           : Math.min(Math.max(newX, 52), 98);
         const clampedY = Math.min(Math.max(newY, 5), 95);
 
-        onPlayerPositionChange(team.key, player.name, Math.round(clampedX * 10) / 10, Math.round(clampedY * 10) / 10);
+        // Snap drop to the nearest tactical marker for stable positioning in 6v6/7v7.
+        const snapped = snapToNearestAvailablePosition(team, player.name, side, clampedX, clampedY);
+
+        onPlayerPositionChange(team.key, player.name, snapped.x, snapped.y);
       };
 
       return (

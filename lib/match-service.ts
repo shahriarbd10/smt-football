@@ -10,6 +10,91 @@ import mongoose from "mongoose";
 
 const MATCH_SLUG = defaultMatch.slug;
 
+function createZeroedTeamsFromCurrent(match: any) {
+  return (match.teams || []).map((team: any) => ({
+    key: team.key,
+    name: team.name,
+    color: team.color,
+    score: 0,
+    teamFouls: 0,
+    yellowCards: 0,
+    redCards: 0,
+    players: (team.players || []).map((player: any) => ({
+      name: player.name,
+      isStarter: Boolean(player.isStarter),
+      isGoalkeeper: Boolean(player.isGoalkeeper),
+      goals: 0,
+      fouls: 0,
+      yellowCards: 0,
+      redCards: 0,
+      assists: 0,
+      position: player.position,
+    })),
+  }));
+}
+
+function ensureHistoryRecord(match: any, matchId: string, matchTitle?: string) {
+  if (!Array.isArray(match.matchHistory)) {
+    match.matchHistory = [];
+  }
+
+  let record = match.matchHistory.find((item: any) => item.id === matchId);
+  if (!record) {
+    record = {
+      id: matchId,
+      title: matchTitle || "Past Match",
+      playersPerSide: match.playersPerSide || 6,
+      slotMinutes: match.slotMinutes || 90,
+      elapsedMinutes: match.elapsedMinutes || 0,
+      teams: createZeroedTeamsFromCurrent(match),
+      events: [],
+      kickoffTime: match.kickoffTime || new Date(),
+      updatedAt: new Date(),
+    };
+    match.matchHistory.push(record);
+  }
+
+  if (matchTitle && String(record.title || "").trim() !== String(matchTitle).trim()) {
+    record.title = String(matchTitle).trim();
+  }
+
+  return record;
+}
+
+function rebuildHistoryRecordFromGlobalEvents(match: any, matchId: string, matchTitle?: string) {
+  const record = ensureHistoryRecord(match, matchId, matchTitle);
+  const events = (match.events || [])
+    .filter((event: any) => String(event.matchId || "live") === String(matchId))
+    .sort((a: any, b: any) => {
+      if (Number(a.minute) !== Number(b.minute)) {
+        return Number(a.minute) - Number(b.minute);
+      }
+      return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+    });
+
+  record.teams = createZeroedTeamsFromCurrent(match);
+  record.events = events.map((event: any) => ({
+    _id: event._id,
+    matchId: event.matchId,
+    matchTitle: event.matchTitle,
+    minute: event.minute,
+    teamKey: event.teamKey,
+    playerName: event.playerName,
+    type: event.type,
+    createdAt: event.createdAt,
+  }));
+
+  events.forEach((event: any) => {
+    const team = record.teams.find((item: any) => item.key === event.teamKey);
+    const player = team?.players.find((item: any) => item.name === event.playerName);
+    if (team && player) {
+      applyEventImpact(team, player, event.type as EventType, 1);
+    }
+  });
+
+  record.updatedAt = new Date();
+}
+
 export async function getLatestMatchForPublic() {
   await connectToDatabase();
 
@@ -50,6 +135,19 @@ export async function getOrCreateMatch() {
       }
     }
 
+    // Self-healing migration for event-to-match linkage.
+    if (match.events && match.events.some((e: any) => !e.matchId)) {
+      const matchDoc = await MatchModel.findOne({ slug: MATCH_SLUG });
+      if (matchDoc) {
+        matchDoc.events.forEach((event: any) => {
+          if (!event.matchId) event.matchId = "live";
+          if (!event.matchTitle) event.matchTitle = "Live Match";
+        });
+        await matchDoc.save();
+        match = await MatchModel.findOne({ slug: MATCH_SLUG }).lean();
+      }
+    }
+
     if (!match.members || !Array.isArray(match.members)) {
       await MatchModel.updateOne({ slug: MATCH_SLUG }, { $set: { members: defaultMatch.members } });
       match = await MatchModel.findOne({ slug: MATCH_SLUG }).lean();
@@ -58,6 +156,30 @@ export async function getOrCreateMatch() {
     if (!match.upcomingEvents || !Array.isArray(match.upcomingEvents)) {
       await MatchModel.updateOne({ slug: MATCH_SLUG }, { $set: { upcomingEvents: [] } });
       match = await MatchModel.findOne({ slug: MATCH_SLUG }).lean();
+    }
+
+    if (!match.matchHistory || !Array.isArray(match.matchHistory)) {
+      await MatchModel.updateOne({ slug: MATCH_SLUG }, { $set: { matchHistory: [] } });
+      match = await MatchModel.findOne({ slug: MATCH_SLUG }).lean();
+    }
+
+    const nonLiveEvents = (match.events || []).filter(
+      (event: any) => String(event.matchId || "live") !== "live",
+    );
+
+    if (nonLiveEvents.length > 0) {
+      const matchDoc = await MatchModel.findOne({ slug: MATCH_SLUG });
+      if (matchDoc) {
+        const ids = Array.from(
+          new Set(nonLiveEvents.map((event: any) => String(event.matchId))),
+        ) as string[];
+        ids.forEach((id) => {
+          const representative = nonLiveEvents.find((event: any) => String(event.matchId) === id);
+          rebuildHistoryRecordFromGlobalEvents(matchDoc, id, representative?.matchTitle || "Past Match");
+        });
+        await matchDoc.save();
+        match = await MatchModel.findOne({ slug: MATCH_SLUG }).lean();
+      }
     }
 
     if (!match.playersPerSide || ![6, 7].includes(Number(match.playersPerSide))) {
@@ -129,6 +251,8 @@ export async function recordEvent(
   playerName: string,
   type: EventType,
   minute: number,
+  matchId = "live",
+  matchTitle = "Live Match",
 ) {
   await connectToDatabase();
   const match = await MatchModel.findOne({ slug: MATCH_SLUG });
@@ -138,26 +262,31 @@ export async function recordEvent(
   }
 
   const team = match.teams.find((t: { key: TeamKey }) => t.key === teamKey);
+  const player = team?.players.find((p: { name: string }) => p.name === playerName);
 
-  if (!team) {
-    throw new Error("Team not found.");
-  }
-
-  const player = team.players.find((p: { name: string }) => p.name === playerName);
-
-  if (!player) {
+  if (!team || !player) {
     throw new Error("Player not found in selected team.");
   }
 
-  applyEventImpact(team, player, type, 1);
+  if (String(matchId) === "live") {
+    applyEventImpact(team, player, type, 1);
+  }
 
   match.events.unshift({
+    matchId,
+    matchTitle,
     minute,
     teamKey,
     playerName,
     type,
     createdAt: new Date(),
   });
+
+  sortEventsTimelineWise(match.events as Array<{ minute: number; createdAt?: Date | string }>);
+
+  if (String(matchId) !== "live") {
+    rebuildHistoryRecordFromGlobalEvents(match, String(matchId), matchTitle);
+  }
 
   match.events = match.events.slice(0, 60);
 
@@ -209,9 +338,28 @@ function applyEventImpact(
   }
 }
 
+function sortEventsTimelineWise(
+  events: Array<{
+    minute: number;
+    createdAt?: Date | string;
+  }>,
+) {
+  events.sort((a, b) => {
+    const minuteDiff = Number(a.minute) - Number(b.minute);
+    if (minuteDiff !== 0) {
+      return minuteDiff;
+    }
+
+    const createdA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const createdB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+    return createdA - createdB;
+  });
+}
+
 function findEventIndexByReference(
   events: Array<{
     _id?: { toString: () => string };
+    matchId?: string;
     minute: number;
     teamKey: string;
     playerName: string;
@@ -247,6 +395,7 @@ function findEventIndexByReference(
 
   return events.findIndex((event) => {
     if (
+      (reference.matchId && String(event.matchId || "live") !== String(reference.matchId)) ||
       Number(event.minute) !== Number(reference.minute) ||
       String(event.teamKey) !== String(reference.teamKey) ||
       String(event.playerName) !== String(reference.playerName) ||
@@ -387,6 +536,80 @@ export async function setKickoffTime(kickoffTime: string) {
   return match.toObject();
 }
 
+export async function updateMatchHistoryRecord(input: {
+  id: string;
+  title?: string;
+  kickoffTime?: string;
+  slotMinutes?: number;
+  elapsedMinutes?: number;
+  teamStats?: Array<{
+    teamKey: TeamKey;
+    score?: number;
+    teamFouls?: number;
+    yellowCards?: number;
+    redCards?: number;
+  }>;
+}) {
+  await connectToDatabase();
+  const match = await MatchModel.findOne({ slug: MATCH_SLUG });
+
+  if (!match) {
+    throw new Error("Match data not found.");
+  }
+
+  const record = ensureHistoryRecord(match, input.id, input.title || "Past Match");
+
+  if (typeof input.title === "string") {
+    const title = input.title.trim();
+    if (!title) throw new Error("Match title cannot be empty.");
+    record.title = title;
+    match.events.forEach((event: any) => {
+      if (String(event.matchId || "live") === String(input.id)) {
+        event.matchTitle = title;
+      }
+    });
+  }
+
+  if (typeof input.kickoffTime === "string") {
+    const date = new Date(input.kickoffTime);
+    if (!Number.isNaN(date.getTime())) {
+      record.kickoffTime = date;
+    }
+  }
+
+  if (typeof input.slotMinutes === "number" && !Number.isNaN(input.slotMinutes)) {
+    record.slotMinutes = Math.max(30, Math.floor(input.slotMinutes));
+  }
+
+  if (typeof input.elapsedMinutes === "number" && !Number.isNaN(input.elapsedMinutes)) {
+    record.elapsedMinutes = Math.max(0, Math.floor(input.elapsedMinutes));
+  }
+
+  if (Array.isArray(input.teamStats)) {
+    const clamp = (value?: number) =>
+      typeof value === "number" && !Number.isNaN(value) ? Math.max(0, Math.floor(value)) : undefined;
+
+    input.teamStats.forEach((stats) => {
+      const team = record.teams.find((item: any) => item.key === stats.teamKey);
+      if (!team) return;
+
+      const score = clamp(stats.score);
+      const teamFouls = clamp(stats.teamFouls);
+      const yellowCards = clamp(stats.yellowCards);
+      const redCards = clamp(stats.redCards);
+
+      if (score !== undefined) team.score = score;
+      if (teamFouls !== undefined) team.teamFouls = teamFouls;
+      if (yellowCards !== undefined) team.yellowCards = yellowCards;
+      if (redCards !== undefined) team.redCards = redCards;
+    });
+  }
+
+  record.updatedAt = new Date();
+  await match.save();
+  return match.toObject();
+}
+
 export async function setPlayerPosition(
   teamKey: TeamKey,
   playerName: string,
@@ -424,6 +647,7 @@ export async function removeEvent(eventId: string) {
 
 type RemoveEventReference = {
   eventId?: string;
+  matchId?: string;
   minute?: number;
   teamKey?: TeamKey;
   playerName?: string;
@@ -475,15 +699,22 @@ export async function removeEventByReference(reference: RemoveEventReference) {
   }
 
   const event = match.events[eventIndex];
-  const team = match.teams.find((t: any) => t.key === event.teamKey);
-  const player = team?.players.find((p: any) => p.name === event.playerName);
+  const eventMatchId = String(event.matchId || "live");
 
-  // Rollback stats
-  if (team && player) {
-    applyEventImpact(team, player, event.type as EventType, -1);
+  if (eventMatchId === "live") {
+    const team = match.teams.find((t: any) => t.key === event.teamKey);
+    const player = team?.players.find((p: any) => p.name === event.playerName);
+    if (team && player) {
+      applyEventImpact(team, player, event.type as EventType, -1);
+    }
   }
 
   match.events.splice(eventIndex, 1);
+
+  if (eventMatchId !== "live") {
+    rebuildHistoryRecordFromGlobalEvents(match, eventMatchId, event.matchTitle || "Past Match");
+  }
+
   await match.save();
   return match.toObject();
 }
@@ -491,6 +722,8 @@ export async function removeEventByReference(reference: RemoveEventReference) {
 export async function updateEventByReference(input: {
   reference: RemoveEventReference;
   updates: {
+    matchId?: string;
+    matchTitle?: string;
     minute?: number;
     teamKey?: TeamKey;
     playerName?: string;
@@ -510,38 +743,67 @@ export async function updateEventByReference(input: {
   }
 
   const currentEvent = match.events[eventIndex];
-  const oldTeam = match.teams.find((team: { key: TeamKey }) => team.key === currentEvent.teamKey);
-  const oldPlayer = oldTeam?.players.find((player: { name: string }) => player.name === currentEvent.playerName);
+  const oldMatchId = String(currentEvent.matchId || "live");
 
-  if (!oldTeam || !oldPlayer) {
-    throw new Error("Original event player/team could not be resolved.");
+  if (oldMatchId === "live") {
+    const oldTeam = match.teams.find((team: { key: TeamKey }) => team.key === currentEvent.teamKey);
+    const oldPlayer = oldTeam?.players.find((player: { name: string }) => player.name === currentEvent.playerName);
+
+    if (!oldTeam || !oldPlayer) {
+      throw new Error("Original event player/team could not be resolved.");
+    }
+
+    applyEventImpact(oldTeam, oldPlayer, currentEvent.type as EventType, -1);
   }
-
-  applyEventImpact(oldTeam, oldPlayer, currentEvent.type as EventType, -1);
 
   const nextTeamKey = input.updates.teamKey || (currentEvent.teamKey as TeamKey);
   const nextPlayerName = input.updates.playerName || currentEvent.playerName;
   const nextType = input.updates.type || (currentEvent.type as EventType);
+  const nextMatchId = input.updates.matchId || currentEvent.matchId || "live";
+  const nextMatchTitle = input.updates.matchTitle || currentEvent.matchTitle || "Live Match";
   const nextMinute =
     typeof input.updates.minute === "number"
       ? Math.max(0, Math.floor(input.updates.minute))
       : currentEvent.minute;
 
-  const nextTeam = match.teams.find((team: { key: TeamKey }) => team.key === nextTeamKey);
-  const nextPlayer = nextTeam?.players.find((player: { name: string }) => player.name === nextPlayerName);
+  if (nextMatchId === "live") {
+    const nextTeam = match.teams.find((team: { key: TeamKey }) => team.key === nextTeamKey);
+    const nextPlayer = nextTeam?.players.find((player: { name: string }) => player.name === nextPlayerName);
 
-  if (!nextTeam || !nextPlayer) {
-    // Restore old stats if the update target is invalid.
-    applyEventImpact(oldTeam, oldPlayer, currentEvent.type as EventType, 1);
-    throw new Error("Updated event player/team could not be resolved.");
+    if (!nextTeam || !nextPlayer) {
+      if (oldMatchId === "live") {
+        const rollbackTeam = match.teams.find((team: { key: TeamKey }) => team.key === currentEvent.teamKey);
+        const rollbackPlayer = rollbackTeam?.players.find((player: { name: string }) => player.name === currentEvent.playerName);
+        if (rollbackTeam && rollbackPlayer) {
+          applyEventImpact(rollbackTeam, rollbackPlayer, currentEvent.type as EventType, 1);
+        }
+      }
+      throw new Error("Updated event player/team could not be resolved.");
+    }
+
+    applyEventImpact(nextTeam, nextPlayer, nextType, 1);
   }
 
-  applyEventImpact(nextTeam, nextPlayer, nextType, 1);
-
   currentEvent.minute = nextMinute;
+  currentEvent.matchId = nextMatchId;
+  currentEvent.matchTitle = nextMatchTitle;
   currentEvent.teamKey = nextTeamKey;
   currentEvent.playerName = nextPlayerName;
   currentEvent.type = nextType;
+
+  sortEventsTimelineWise(match.events as Array<{ minute: number; createdAt?: Date | string }>);
+
+  const affected = new Set<string>();
+  if (oldMatchId !== "live") affected.add(oldMatchId);
+  if (nextMatchId !== "live") affected.add(nextMatchId);
+  affected.forEach((id) => {
+    const representative = (match.events || []).find((event: any) => String(event.matchId || "live") === id);
+    rebuildHistoryRecordFromGlobalEvents(
+      match,
+      id,
+      representative?.matchTitle || (id === nextMatchId ? nextMatchTitle : "Past Match"),
+    );
+  });
 
   await match.save();
   return match.toObject();
@@ -681,6 +943,23 @@ export async function upsertUpcomingEvent(eventInput: {
     (a: { eventDate: Date }, b: { eventDate: Date }) =>
       new Date(a.eventDate).getTime() - new Date(b.eventDate).getTime(),
   );
+
+  // Keep historical match record/event labels aligned with upcoming event edits when IDs match.
+  if (Array.isArray(match.matchHistory)) {
+    const historyRecord = match.matchHistory.find((record: any) => record.id === eventId);
+    if (historyRecord) {
+      historyRecord.title = title;
+      historyRecord.kickoffTime = eventDate;
+      historyRecord.slotMinutes = Math.max(30, Number(eventInput.slotMinutes || 90));
+      historyRecord.updatedAt = new Date();
+    }
+  }
+
+  match.events.forEach((event: any) => {
+    if (String(event.matchId || "live") === String(eventId)) {
+      event.matchTitle = title;
+    }
+  });
 
   await match.save();
   return match.toObject();

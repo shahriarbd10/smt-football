@@ -31,6 +31,8 @@ export type MatchEvent = {
   playerName: string;
   type: EventType;
   createdAt: string;
+  matchId?: string;
+  matchTitle?: string;
   _id?: string;
 };
 
@@ -64,8 +66,21 @@ export type MatchData = {
   events: MatchEvent[];
   members: Member[];
   upcomingEvents: UpcomingEvent[];
+  matchHistory: MatchRecord[];
   updatedAt: string;
   kickoffTime: string;
+};
+
+export type MatchRecord = {
+  id: string;
+  title: string;
+  playersPerSide: 6 | 7;
+  slotMinutes: number;
+  elapsedMinutes: number;
+  teams: Team[];
+  events: MatchEvent[];
+  kickoffTime: string;
+  updatedAt: string;
 };
 
 const makePlayer = (
@@ -156,5 +171,6 @@ export const defaultMatch: Omit<MatchData, "updatedAt"> = {
   events: [],
   members: initialMembers,
   upcomingEvents: [],
+  matchHistory: [],
   kickoffTime: "2026-04-08T18:00:00+06:00",
 };

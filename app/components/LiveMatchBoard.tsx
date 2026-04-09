@@ -5,10 +5,8 @@ import useSWR from "swr";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   Trophy, 
-  Clock, 
   Activity, 
   AlertCircle, 
-  ChevronRight,
   Zap,
   Target,
   History,
@@ -50,6 +48,8 @@ type MatchData = {
   teams: Team[];
   events: Array<{
     minute: number;
+    matchId?: string;
+    matchTitle?: string;
     teamKey: "A" | "B";
     playerName: string;
     type: "goal" | "assist" | "foul" | "yellow" | "red";
@@ -70,6 +70,51 @@ function EventIcon({ type }: { type: string }) {
   if (type === "yellow") return <Zap className="text-yellow-400" size={16} />;
   if (type === "red") return <ShieldAlert className="text-rose-400" size={16} />;
   return <AlertCircle className="text-amber-400" size={16} />;
+}
+
+function getEventPresentation(type: "goal" | "assist" | "foul" | "yellow" | "red") {
+  if (type === "goal") {
+    return {
+      label: "Goal",
+      border: "border-emerald-500/30",
+      chip: "bg-emerald-500/20 text-emerald-300",
+      accent: "bg-emerald-400",
+    };
+  }
+
+  if (type === "assist") {
+    return {
+      label: "Assist",
+      border: "border-indigo-500/30",
+      chip: "bg-indigo-500/20 text-indigo-300",
+      accent: "bg-indigo-400",
+    };
+  }
+
+  if (type === "yellow") {
+    return {
+      label: "Yellow Card",
+      border: "border-yellow-500/30",
+      chip: "bg-yellow-500/20 text-yellow-300",
+      accent: "bg-yellow-400",
+    };
+  }
+
+  if (type === "red") {
+    return {
+      label: "Red Card",
+      border: "border-rose-500/30",
+      chip: "bg-rose-500/20 text-rose-300",
+      accent: "bg-rose-400",
+    };
+  }
+
+  return {
+    label: "Foul",
+    border: "border-amber-500/30",
+    chip: "bg-amber-500/20 text-amber-300",
+    accent: "bg-amber-400",
+  };
 }
 
 function CountdownDisplay({ targetDate }: { targetDate: Date }) {
@@ -177,13 +222,17 @@ export default function LiveMatchBoard() {
   const topAssist = getLeaders((player) => player.assists);
   const topFouls = getLeaders((player) => player.fouls);
   const topYellow = getLeaders((player) => player.yellowCards);
-  const timelineEvents = [...data.events].sort((a, b) => {
+  const timelineEvents = data.events
+    .filter((event) => (event.matchId || "live") === "live")
+    .sort((a, b) => {
     if (a.minute !== b.minute) {
       return a.minute - b.minute;
     }
 
     return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
   });
+
+  const timelineFeed = [...timelineEvents].reverse();
 
   // Countdown Logic
   const kickoffDate = data.kickoffTime ? new Date(data.kickoffTime) : null;
@@ -429,47 +478,71 @@ export default function LiveMatchBoard() {
               <History className="text-emerald-400" size={24} />
               Match Timeline
             </h3>
+            <span className="rounded-full border border-white/10 bg-black/30 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.2em] text-white/50">
+              Latest first
+            </span>
           </div>
           <div className="flex-1 space-y-4 overflow-y-auto pr-2 custom-scrollbar max-h-[500px]">
             <AnimatePresence mode="popLayout">
-              {timelineEvents.length === 0 ? (
+              {timelineFeed.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-12 text-center text-white/30">
                   <TrendingUp size={32} className="mb-2 opacity-20" />
                   <p className="text-sm">Ball is rolling. Waiting for events...</p>
                 </div>
               ) : (
-                timelineEvents.map((event, index) => (
+                timelineFeed.map((event, index) => {
+                  const meta = getEventPresentation(event.type);
+                  const isTeamA = event.teamKey === "A";
+
+                  return (
                   <motion.div
                     key={`${event.createdAt}-${index}`}
                     initial={{ opacity: 0, x: 20 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: index * 0.05 }}
-                    className="group relative flex gap-4"
+                    className="group relative"
                   >
-                    <div className="relative flex flex-col items-center">
-                      <div className="z-10 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-black/40 border border-white/10 group-hover:border-emerald-500/30 transition-colors">
-                        <EventIcon type={event.type} />
-                      </div>
-                      {index < timelineEvents.length - 1 && (
-                        <div className="h-full w-px bg-white/5" />
-                      )}
-                    </div>
-                    <div className="flex-1 pb-4">
-                      <div className="rounded-2xl bg-white/5 p-4 transition-colors group-hover:bg-white/10">
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="text-sm font-bold text-white">{event.playerName}</span>
-                          <span className="text-xs font-bold text-emerald-400">{event.minute}&apos;</span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-white/40">
-                            Team {event.teamKey} • {event.type}
+                    <div
+                      className={`relative overflow-hidden rounded-2xl border bg-black/30 p-4 pl-5 transition-colors hover:bg-black/40 ${meta.border}`}
+                    >
+                      <span className={`absolute left-0 top-0 h-full w-1 ${meta.accent}`} />
+
+                      <div className="mb-3 flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-2">
+                          <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-black/40">
+                            <EventIcon type={event.type} />
+                          </div>
+                          <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] ${meta.chip}`}>
+                            {meta.label}
                           </span>
-                          <ChevronRight size={14} className="text-white/20 group-hover:text-emerald-400 transition-colors" />
+                        </div>
+
+                        <div className="rounded-full border border-white/15 bg-black/45 px-3 py-1 text-sm font-black text-white">
+                          {event.minute}&apos;
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-black text-white">{event.playerName}</p>
+                          <p className="mt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-white/45">
+                            {isTeamA ? teamA.name : teamB.name}
+                          </p>
+                        </div>
+
+                        <div className="text-right">
+                          <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/40">Team</p>
+                          <p className={`text-xs font-black ${isTeamA ? "text-emerald-300" : "text-amber-300"}`}>
+                            {event.teamKey}
+                          </p>
                         </div>
                       </div>
                     </div>
+
+                    {index < timelineFeed.length - 1 && <div className="mx-auto mt-2 h-3 w-px bg-white/10" />}
                   </motion.div>
-                ))
+                );
+              })
               )}
             </AnimatePresence>
           </div>

@@ -15,6 +15,7 @@ import {
   removeMember,
   removeUpcomingEvent,
   setUpcomingMemberStatus,
+  updateMatchHistoryRecord,
   upsertMember,
   upsertUpcomingEvent,
   updatePlayerStat,
@@ -81,6 +82,8 @@ export async function PATCH(request: Request) {
         body.playerName as string,
         body.type as EventType,
         Number(body.minute ?? 0),
+        (body.matchId as string | undefined) || "live",
+        (body.matchTitle as string | undefined) || "Live Match",
       );
       return Response.json(result);
     }
@@ -133,9 +136,10 @@ export async function PATCH(request: Request) {
     }
 
     if (action === "removeEvent") {
-      const { eventId, minute, teamKey, playerName, type, createdAt } = body as any;
+      const { eventId, matchId, minute, teamKey, playerName, type, createdAt } = body as any;
       const result = await removeEventByReference({
         eventId,
+        matchId,
         minute,
         teamKey,
         playerName,
@@ -149,6 +153,7 @@ export async function PATCH(request: Request) {
       const result = await updateEventByReference({
         reference: {
           eventId: body.eventId as string | undefined,
+          matchId: body.matchId as string | undefined,
           minute: body.minute as number | undefined,
           teamKey: body.teamKey as "A" | "B" | undefined,
           playerName: body.playerName as string | undefined,
@@ -156,6 +161,8 @@ export async function PATCH(request: Request) {
           createdAt: body.createdAt as string | undefined,
         },
         updates: {
+          matchId: body.newMatchId as string | undefined,
+          matchTitle: body.newMatchTitle as string | undefined,
           minute: body.newMinute as number | undefined,
           teamKey: body.newTeamKey as TeamKey | undefined,
           playerName: body.newPlayerName as string | undefined,
@@ -203,6 +210,26 @@ export async function PATCH(request: Request) {
         memberId: body.memberId as string,
         confirmed: body.confirmed as boolean | undefined,
         paymentStatus: body.paymentStatus as "paid" | "unpaid" | "pending" | undefined,
+      });
+      return Response.json(result);
+    }
+
+    if (action === "updateMatchHistoryRecord") {
+      const result = await updateMatchHistoryRecord({
+        id: body.id as string,
+        title: body.title as string | undefined,
+        kickoffTime: body.kickoffTime as string | undefined,
+        slotMinutes: Number(body.slotMinutes ?? NaN),
+        elapsedMinutes: Number(body.elapsedMinutes ?? NaN),
+        teamStats: body.teamStats as
+          | Array<{
+              teamKey: TeamKey;
+              score?: number;
+              teamFouls?: number;
+              yellowCards?: number;
+              redCards?: number;
+            }>
+          | undefined,
       });
       return Response.json(result);
     }

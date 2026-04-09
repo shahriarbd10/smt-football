@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useMemo, useRef, useState } from "react";
 import useSWR from "swr";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
@@ -47,6 +47,8 @@ type Team = {
 
 type MatchEvent = {
   _id?: string;
+  matchId?: string;
+  matchTitle?: string;
   minute: number;
   teamKey: "A" | "B";
   playerName: string;
@@ -85,6 +87,17 @@ type MatchData = {
   events: MatchEvent[];
   members: Member[];
   upcomingEvents: UpcomingEvent[];
+  matchHistory: Array<{
+    id: string;
+    title: string;
+    playersPerSide: 6 | 7;
+    slotMinutes: number;
+    elapsedMinutes: number;
+    kickoffTime: string;
+    teams: Team[];
+    events: MatchEvent[];
+    updatedAt: string;
+  }>;
   kickoffTime: string;
 };
 
@@ -119,6 +132,7 @@ export default function AdminPanel() {
   const [playerName, setPlayerName] = useState("");
   const [minute, setMinute] = useState(1);
   const [eventType, setEventType] = useState<"goal" | "assist" | "foul" | "yellow" | "red">("goal");
+  const [selectedEventMatchId, setSelectedEventMatchId] = useState("live");
   const [message, setMessage] = useState("");
   const [scoreInputs, setScoreInputs] = useState<Record<"A" | "B", string>>({ A: "0", B: "0" });
   const [memberNameDraft, setMemberNameDraft] = useState("");
@@ -127,9 +141,11 @@ export default function AdminPanel() {
   const [eventSlotDraft, setEventSlotDraft] = useState("90");
   const [eventNotesDraft, setEventNotesDraft] = useState("");
   const [selectedUpcomingEventId, setSelectedUpcomingEventId] = useState("");
+  const [selectedHistoryMatchId, setSelectedHistoryMatchId] = useState("");
   const [selectedCalendarDate, setSelectedCalendarDate] = useState(
     new Date().toISOString().slice(0, 10),
   );
+  const upcomingDateInputRef = useRef<HTMLInputElement>(null);
 
   const unauthorized = error?.message === "UNAUTHORIZED";
 
@@ -195,6 +211,51 @@ export default function AdminPanel() {
     return new Date(data.kickoffTime).toISOString().slice(0, 10) === selectedCalendarDate;
   }, [data?.kickoffTime, selectedCalendarDate]);
 
+  const selectedHistoryMatch = useMemo(() => {
+    if (!data?.matchHistory?.length) return undefined;
+    if (!selectedHistoryMatchId) return data.matchHistory[0];
+    return data.matchHistory.find((item) => item.id === selectedHistoryMatchId) || data.matchHistory[0];
+  }, [data?.matchHistory, selectedHistoryMatchId]);
+
+  const eventLogMatchOptions = useMemo(() => {
+    const upcoming = [...(data?.upcomingEvents || [])].sort(
+      (a, b) => new Date(a.eventDate).getTime() - new Date(b.eventDate).getTime(),
+    );
+
+    return [
+      { id: "live", title: "Live Match" },
+      ...upcoming.map((event) => ({
+        id: event.id,
+        title: `${event.title} (${new Date(event.eventDate).toLocaleDateString()})`,
+      })),
+    ];
+  }, [data?.upcomingEvents]);
+
+  const selectedEventMatchTitle =
+    eventLogMatchOptions.find((item) => item.id === selectedEventMatchId)?.title || "Live Match";
+
+  const selectedMatchTimelineEvents = useMemo(() => {
+    const target = selectedEventMatchId || "live";
+
+    return [...(data?.events || [])]
+      .filter((event) => (event.matchId || "live") === target)
+      .sort((a, b) => {
+        if (a.minute !== b.minute) return a.minute - b.minute;
+        return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+      });
+  }, [data?.events, selectedEventMatchId]);
+
+  function openNativeDateTimePicker(input: HTMLInputElement | null) {
+    if (!input) return;
+    const pickerInput = input as HTMLInputElement & { showPicker?: () => void };
+    if (typeof pickerInput.showPicker === "function") {
+      pickerInput.showPicker();
+      return;
+    }
+    pickerInput.focus();
+    pickerInput.click();
+  }
+
   async function login(e: FormEvent) {
     e.preventDefault();
     const response = await fetch("/api/admin/login", {
@@ -256,6 +317,8 @@ export default function AdminPanel() {
     try {
       await patchMatch({
         action: "recordEvent",
+        matchId: selectedEventMatchId,
+        matchTitle: selectedEventMatchTitle,
         teamKey: selectedTeam,
         playerName,
         type: eventType,
@@ -343,6 +406,7 @@ export default function AdminPanel() {
       await patchMatch({
         action: "removeEvent",
         eventId: event._id,
+        matchId: event.matchId || "live",
         minute: event.minute,
         teamKey: event.teamKey,
         playerName: event.playerName,
@@ -369,11 +433,14 @@ export default function AdminPanel() {
       await patchMatch({
         action: "updateEvent",
         eventId: event._id,
+        matchId: event.matchId || "live",
         minute: event.minute,
         teamKey: event.teamKey,
         playerName: event.playerName,
         type: event.type,
         createdAt: event.createdAt,
+        newMatchId: event.matchId || "live",
+        newMatchTitle: event.matchTitle || "Live Match",
         newMinute: updates.minute,
         newTeamKey: updates.teamKey,
         newPlayerName: updates.playerName,
@@ -486,6 +553,29 @@ export default function AdminPanel() {
       await mutate();
     } catch (err) {
       setMessage(err instanceof Error ? err.message : "Could not update upcoming event.");
+    }
+  }
+
+  async function updateHistoryMatchRecord(input: {
+    id: string;
+    title?: string;
+    kickoffTime?: string;
+    slotMinutes?: number;
+    elapsedMinutes?: number;
+    teamStats?: Array<{
+      teamKey: "A" | "B";
+      score?: number;
+      teamFouls?: number;
+      yellowCards?: number;
+      redCards?: number;
+    }>;
+  }) {
+    try {
+      await patchMatch({ action: "updateMatchHistoryRecord", ...input });
+      setMessage("Previous match updated.");
+      await mutate();
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Could not update previous match record.");
     }
   }
 
@@ -833,6 +923,151 @@ export default function AdminPanel() {
                   ))}
                 </div>
               </section>
+
+              <section className="glass-pane rounded-[2rem] p-8" aria-labelledby="previous-matches-title">
+                <h2 id="previous-matches-title" className="mb-6 flex items-center gap-3 text-xl font-bold text-white uppercase">
+                  <CalendarDays className="text-emerald-500" size={20} aria-hidden="true" />
+                  Previous Match Records
+                </h2>
+
+                {!data.matchHistory || data.matchHistory.length === 0 ? (
+                  <p className="rounded-xl border border-white/10 bg-black/20 p-3 text-xs font-bold uppercase tracking-[0.2em] text-white/40">
+                    No previous matches yet
+                  </p>
+                ) : (
+                  <div className="space-y-4">
+                    <select
+                      value={selectedHistoryMatch?.id || ""}
+                      onChange={(e) => setSelectedHistoryMatchId(e.target.value)}
+                      className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm font-bold text-white outline-none focus:border-emerald-500/40"
+                    >
+                      {data.matchHistory
+                        .slice()
+                        .sort((a, b) => new Date(b.kickoffTime).getTime() - new Date(a.kickoffTime).getTime())
+                        .map((record) => (
+                          <option key={record.id} value={record.id}>
+                            {record.title} ({new Date(record.kickoffTime).toLocaleDateString()})
+                          </option>
+                        ))}
+                    </select>
+
+                    {selectedHistoryMatch ? (
+                      <div className="space-y-3 rounded-xl border border-white/10 bg-black/20 p-3">
+                        <input
+                          defaultValue={selectedHistoryMatch.title}
+                          key={`history-title-${selectedHistoryMatch.id}`}
+                          onBlur={(e) => {
+                            const value = e.target.value.trim();
+                            if (!value || value === selectedHistoryMatch.title) return;
+                            updateHistoryMatchRecord({ id: selectedHistoryMatch.id, title: value });
+                          }}
+                          className="w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm font-bold text-white outline-none focus:border-emerald-500/40"
+                        />
+
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          <input
+                            type="datetime-local"
+                            key={`history-kickoff-${selectedHistoryMatch.id}`}
+                            defaultValue={new Date(
+                              new Date(selectedHistoryMatch.kickoffTime).getTime() - new Date().getTimezoneOffset() * 60000,
+                            )
+                              .toISOString()
+                              .slice(0, 16)}
+                            onBlur={(e) => {
+                              if (!e.target.value) return;
+                              updateHistoryMatchRecord({
+                                id: selectedHistoryMatch.id,
+                                kickoffTime: new Date(e.target.value).toISOString(),
+                              });
+                            }}
+                            className="w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-xs font-bold text-white outline-none focus:border-emerald-500/40"
+                          />
+                          <input
+                            type="number"
+                            min={30}
+                            key={`history-slot-${selectedHistoryMatch.id}`}
+                            defaultValue={selectedHistoryMatch.slotMinutes}
+                            onBlur={(e) => {
+                              const value = Number(e.target.value);
+                              if (Number.isNaN(value) || value === selectedHistoryMatch.slotMinutes) return;
+                              updateHistoryMatchRecord({ id: selectedHistoryMatch.id, slotMinutes: value });
+                            }}
+                            className="w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-xs font-bold text-white outline-none focus:border-emerald-500/40"
+                          />
+                        </div>
+
+                        {selectedHistoryMatch.teams.map((team) => (
+                          <div key={`history-team-${selectedHistoryMatch.id}-${team.key}`} className="rounded-lg border border-white/10 bg-black/30 p-3">
+                            <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.16em] text-white/50">{team.name} Stats</p>
+                            <div className="grid grid-cols-4 gap-2">
+                              <input
+                                type="number"
+                                min={0}
+                                defaultValue={team.score}
+                                onBlur={(e) => {
+                                  const value = Number(e.target.value);
+                                  if (Number.isNaN(value) || value === team.score) return;
+                                  updateHistoryMatchRecord({
+                                    id: selectedHistoryMatch.id,
+                                    teamStats: [{ teamKey: team.key, score: value }],
+                                  });
+                                }}
+                                className="rounded-md border border-white/10 bg-black/40 px-2 py-1 text-xs font-bold text-white outline-none"
+                                placeholder="Score"
+                              />
+                              <input
+                                type="number"
+                                min={0}
+                                defaultValue={team.teamFouls}
+                                onBlur={(e) => {
+                                  const value = Number(e.target.value);
+                                  if (Number.isNaN(value) || value === team.teamFouls) return;
+                                  updateHistoryMatchRecord({
+                                    id: selectedHistoryMatch.id,
+                                    teamStats: [{ teamKey: team.key, teamFouls: value }],
+                                  });
+                                }}
+                                className="rounded-md border border-white/10 bg-black/40 px-2 py-1 text-xs font-bold text-white outline-none"
+                                placeholder="Fouls"
+                              />
+                              <input
+                                type="number"
+                                min={0}
+                                defaultValue={team.yellowCards}
+                                onBlur={(e) => {
+                                  const value = Number(e.target.value);
+                                  if (Number.isNaN(value) || value === team.yellowCards) return;
+                                  updateHistoryMatchRecord({
+                                    id: selectedHistoryMatch.id,
+                                    teamStats: [{ teamKey: team.key, yellowCards: value }],
+                                  });
+                                }}
+                                className="rounded-md border border-white/10 bg-black/40 px-2 py-1 text-xs font-bold text-white outline-none"
+                                placeholder="YC"
+                              />
+                              <input
+                                type="number"
+                                min={0}
+                                defaultValue={team.redCards}
+                                onBlur={(e) => {
+                                  const value = Number(e.target.value);
+                                  if (Number.isNaN(value) || value === team.redCards) return;
+                                  updateHistoryMatchRecord({
+                                    id: selectedHistoryMatch.id,
+                                    teamStats: [{ teamKey: team.key, redCards: value }],
+                                  });
+                                }}
+                                className="rounded-md border border-white/10 bg-black/40 px-2 py-1 text-xs font-bold text-white outline-none"
+                                placeholder="RC"
+                              />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                )}
+              </section>
             </motion.div>
           )}
 
@@ -847,6 +1082,21 @@ export default function AdminPanel() {
               <h2 className="mb-6 text-xl font-bold text-white uppercase">Log Match Event</h2>
               <form onSubmit={submitEvent} className="space-y-6">
                 <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2 sm:col-span-2">
+                    <label className="ml-2 text-[10px] font-bold uppercase tracking-widest text-white/40">Match Context</label>
+                    <select
+                      value={selectedEventMatchId}
+                      onChange={(e) => setSelectedEventMatchId(e.target.value)}
+                      className="w-full rounded-xl border border-white/5 bg-black/40 px-4 py-2.5 text-white outline-none transition-all focus:border-emerald-500/30"
+                    >
+                      {eventLogMatchOptions.map((option) => (
+                        <option key={option.id} value={option.id}>
+                          {option.title}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
                   <div className="space-y-2">
                     <label className="text-[10px] font-bold uppercase tracking-widest text-white/40 ml-2">Active Team</label>
                     <div className="flex gap-2 p-1 rounded-xl bg-black/40">
@@ -927,12 +1177,10 @@ export default function AdminPanel() {
               <div className="mt-8 pt-8 border-t border-white/5 space-y-4">
                 <h3 className="text-xs font-bold text-white/40 uppercase tracking-widest ml-2">Session Timeline</h3>
                 <div className="flex flex-col gap-3">
-                  {data.events.length === 0 ? (
+                  {selectedMatchTimelineEvents.length === 0 ? (
                     <p className="text-center text-xs font-bold text-white/20 uppercase py-4">No events recorded</p>
                   ) : (
-                    [...data.events]
-                      .sort((a, b) => a.minute - b.minute)
-                      .map((event, index) => (
+                    selectedMatchTimelineEvents.map((event, index) => (
                       <div key={event._id ?? `${event.createdAt}-${event.playerName}-${event.minute}-${index}`} className="flex items-center justify-between rounded-xl bg-black/40 p-3 border border-white/5">
                         <div className="flex items-center gap-3">
                           <span className="flex h-6 w-6 items-center justify-center rounded bg-emerald-500/10 text-[10px] font-black text-emerald-500">
@@ -1026,12 +1274,24 @@ export default function AdminPanel() {
                     placeholder="Event title"
                     className="rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm font-bold text-white outline-none focus:border-emerald-500/40"
                   />
-                  <input
-                    type="datetime-local"
-                    value={eventDateDraft}
-                    onChange={(e) => setEventDateDraft(e.target.value)}
-                    className="rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm font-bold text-white outline-none focus:border-emerald-500/40"
-                  />
+                  <div className="relative">
+                    <input
+                      ref={upcomingDateInputRef}
+                      type="datetime-local"
+                      value={eventDateDraft}
+                      onChange={(e) => setEventDateDraft(e.target.value)}
+                      className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 pr-10 text-sm font-bold text-white outline-none focus:border-emerald-500/40"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => openNativeDateTimePicker(upcomingDateInputRef.current)}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1.5 text-emerald-300 hover:bg-emerald-500/15"
+                      title="Open calendar"
+                      aria-label="Open calendar"
+                    >
+                      <Calendar size={16} />
+                    </button>
+                  </div>
                   <input
                     type="number"
                     min={30}
@@ -1193,22 +1453,37 @@ export default function AdminPanel() {
                           className="mb-2 w-full rounded-lg border border-white/10 bg-black/40 px-2 py-1 text-sm font-bold text-white outline-none"
                         />
                         <div className="grid grid-cols-2 gap-2">
-                          <input
-                            type="datetime-local"
-                            defaultValue={new Date(new Date(event.eventDate).getTime() - new Date().getTimezoneOffset() * 60000)
-                              .toISOString()
-                              .slice(0, 16)}
-                            onBlur={(e) => {
-                              if (!e.target.value) return;
-                              updateUpcomingEventRecord(event.id, {
-                                title: event.title,
-                                eventDate: new Date(e.target.value).toISOString(),
-                                slotMinutes: event.slotMinutes,
-                                notes: event.notes,
-                              });
-                            }}
-                            className="rounded-lg border border-white/10 bg-black/40 px-2 py-1 text-xs font-bold text-white outline-none"
-                          />
+                          <div className="relative">
+                            <input
+                              type="datetime-local"
+                              defaultValue={new Date(new Date(event.eventDate).getTime() - new Date().getTimezoneOffset() * 60000)
+                                .toISOString()
+                                .slice(0, 16)}
+                              onBlur={(e) => {
+                                if (!e.target.value) return;
+                                updateUpcomingEventRecord(event.id, {
+                                  title: event.title,
+                                  eventDate: new Date(e.target.value).toISOString(),
+                                  slotMinutes: event.slotMinutes,
+                                  notes: event.notes,
+                                });
+                              }}
+                              className="w-full rounded-lg border border-white/10 bg-black/40 px-2 py-1 pr-8 text-xs font-bold text-white outline-none"
+                            />
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                const wrapper = e.currentTarget.parentElement;
+                                const input = wrapper?.querySelector("input[type='datetime-local']") as HTMLInputElement | null;
+                                openNativeDateTimePicker(input);
+                              }}
+                              className="absolute right-1 top-1/2 -translate-y-1/2 rounded-md p-1 text-emerald-300 hover:bg-emerald-500/15"
+                              title="Open calendar"
+                              aria-label="Open calendar"
+                            >
+                              <Calendar size={14} />
+                            </button>
+                          </div>
                           <input
                             type="number"
                             defaultValue={event.slotMinutes}

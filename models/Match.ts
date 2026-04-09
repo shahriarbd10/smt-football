@@ -35,6 +35,8 @@ const TeamSchema = new Schema(
 const MatchEventSchema = new Schema(
   {
     minute: { type: Number, required: true },
+    matchId: { type: String, default: "live" },
+    matchTitle: { type: String, default: "Live Match" },
     teamKey: { type: String, enum: ["A", "B"], required: true },
     playerName: { type: String, required: true },
     type: {
@@ -80,6 +82,21 @@ const UpcomingEventSchema = new Schema(
   { _id: false },
 );
 
+const MatchRecordSchema = new Schema(
+  {
+    id: { type: String, required: true },
+    title: { type: String, required: true },
+    playersPerSide: { type: Number, enum: [6, 7], default: 6 },
+    slotMinutes: { type: Number, default: 90 },
+    elapsedMinutes: { type: Number, default: 0 },
+    teams: { type: [TeamSchema], default: [] },
+    events: { type: [MatchEventSchema], default: [] },
+    kickoffTime: { type: Date, required: true },
+    updatedAt: { type: Date, default: Date.now },
+  },
+  { _id: false },
+);
+
 const MatchSchema = new Schema(
   {
     slug: { type: String, required: true, unique: true },
@@ -91,6 +108,7 @@ const MatchSchema = new Schema(
     events: { type: [MatchEventSchema], default: [] },
     members: { type: [MemberSchema], default: [] },
     upcomingEvents: { type: [UpcomingEventSchema], default: [] },
+    matchHistory: { type: [MatchRecordSchema], default: [] },
     kickoffTime: { type: Date, default: () => new Date("2026-04-08T18:00:00+06:00") },
   },
   { timestamps: true },
