@@ -10,6 +10,19 @@ import mongoose from "mongoose";
 
 const MATCH_SLUG = defaultMatch.slug;
 
+export async function getLatestMatchForPublic() {
+  await connectToDatabase();
+
+  let match = await MatchModel.findOne().sort({ updatedAt: -1 }).lean();
+
+  if (!match) {
+    await MatchModel.create(defaultMatch);
+    match = await MatchModel.findOne().sort({ updatedAt: -1 }).lean();
+  }
+
+  return match;
+}
+
 export async function getOrCreateMatch() {
   await connectToDatabase();
 

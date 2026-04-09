@@ -28,10 +28,7 @@ interface TacticalCanvasProps {
 export function TacticalCanvas({ teamA, teamB, playersPerSide = 6, isEditable, onPlayerPositionChange }: TacticalCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const renderPlayers = (team: Team, side: "left" | "right", color: string) => {
-    const starters = team.players.filter((p) => p.isStarter);
-    
-    // Default formation logic [x, y]
+  const getDefaultPositions = (count: 6 | 7, side: "left" | "right") => {
     const defaultPositionsByFormat: Record<number, Array<[number, number]>> = {
       6: [
         [8, 50],
@@ -52,7 +49,35 @@ export function TacticalCanvas({ teamA, teamB, playersPerSide = 6, isEditable, o
       ],
     };
 
-    const defaultPositions = defaultPositionsByFormat[playersPerSide] || defaultPositionsByFormat[6];
+    const defaults = defaultPositionsByFormat[count] || defaultPositionsByFormat[6];
+
+    return defaults.map(([x, y]) => ({
+      x: side === "right" ? 100 - x : x,
+      y,
+    }));
+  };
+
+  const renderDropTargets = (side: "left" | "right") => {
+    const positions = getDefaultPositions(playersPerSide, side);
+
+    return positions.map((position, index) => (
+      <div
+        key={`${side}-target-${index}`}
+        className="pointer-events-none absolute opacity-70"
+        style={{
+          left: `${position.x}%`,
+          top: `${position.y}%`,
+          transform: "translate(-50%, -50%)"
+        }}
+      >
+        <div className="h-7 w-7 rounded-full border border-dashed border-white/35 bg-black/15" />
+      </div>
+    ));
+  };
+
+  const renderPlayers = (team: Team, side: "left" | "right", color: string) => {
+    const starters = team.players.filter((p) => p.isStarter);
+    const defaultPositions = getDefaultPositions(playersPerSide, side);
 
     return starters.slice(0, playersPerSide).map((player, index) => {
       let x, y;
@@ -61,10 +86,7 @@ export function TacticalCanvas({ teamA, teamB, playersPerSide = 6, isEditable, o
         x = player.position.x;
         y = player.position.y;
       } else {
-        [x, y] = defaultPositions[index];
-        if (side === "right") {
-          x = 100 - x;
-        }
+        ({ x, y } = defaultPositions[index]);
       }
 
       const handleDragEnd = (_event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
@@ -152,6 +174,8 @@ export function TacticalCanvas({ teamA, teamB, playersPerSide = 6, isEditable, o
       <div className="absolute right-0 top-1/4 h-1/2 w-[12%] rounded-l-3xl border-2 border-r-0 border-white/20 bg-white/5" />
 
       <div className="relative h-full w-full">
+        {isEditable && renderDropTargets("left")}
+        {isEditable && renderDropTargets("right")}
         {renderPlayers(teamA, "left", "#10b981")}
         {renderPlayers(teamB, "right", "#f59e0b")}
       </div>

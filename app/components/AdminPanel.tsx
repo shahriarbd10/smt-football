@@ -113,8 +113,8 @@ export default function AdminPanel() {
   });
   
   const [activeTab, setActiveTab] = useState<"overview" | "lineup" | "events" | "planning">("overview");
-  const [email, setEmail] = useState("smtfootball@admin.com");
-  const [password, setPassword] = useState("123456");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [selectedTeam, setSelectedTeam] = useState<"A" | "B">("A");
   const [playerName, setPlayerName] = useState("");
   const [minute, setMinute] = useState(1);
@@ -1362,8 +1362,29 @@ export default function AdminPanel() {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
-              className="grid gap-6 lg:grid-cols-2"
+              className="grid gap-6"
             >
+              <section className="glass-pane rounded-[2rem] p-6 md:p-8">
+                <div className="mb-4 flex items-center justify-between">
+                  <h3 className="text-xl font-bold text-white uppercase">Shared Tactical Drag Board</h3>
+                  <div className="flex items-center gap-2 rounded-full bg-black/40 px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-white/60">
+                    <MousePointer2 size={12} className="text-emerald-500" />
+                    Drag and drop on marked spots
+                  </div>
+                </div>
+
+                <div className="rounded-[2rem] border border-white/10 bg-black/30 p-2">
+                  <TacticalCanvas
+                    teamA={data.teams[0]}
+                    teamB={data.teams[1]}
+                    playersPerSide={data.playersPerSide}
+                    isEditable={true}
+                    onPlayerPositionChange={handlePlayerPositionChange}
+                  />
+                </div>
+              </section>
+
+              <div className="grid gap-6 lg:grid-cols-2">
               {data.teams.map(team => (
                 <div key={team.key} className="glass-pane rounded-[2rem] p-8">
                   <div className="mb-8 flex items-center justify-between">
@@ -1380,20 +1401,6 @@ export default function AdminPanel() {
                       <Save size={14} />
                       Confirm XI
                     </button>
-                  </div>
-
-                  <div className="mb-8 p-1 rounded-[2.5rem] bg-black/40 border border-white/5 relative group">
-                    <div className="absolute top-4 left-4 z-10 flex items-center gap-2 rounded-full bg-black/60 px-3 py-1.5 text-[8px] font-bold text-white/40 border border-white/10 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <MousePointer2 size={10} className="text-emerald-500" />
-                      DRAG PLAYERS TO POSITION
-                    </div>
-                    <TacticalCanvas 
-                      teamA={data.teams[0]} 
-                      teamB={data.teams[1]} 
-                      playersPerSide={data.playersPerSide}
-                      isEditable={true} 
-                      onPlayerPositionChange={handlePlayerPositionChange}
-                    />
                   </div>
 
                   <div className="space-y-2">
@@ -1483,6 +1490,7 @@ export default function AdminPanel() {
                   </div>
                 </div>
               ))}
+              </div>
             </motion.div>
           )}
         </AnimatePresence>
