@@ -10,7 +10,15 @@ export async function GET(request: Request) {
 
     const url = new URL(request.url);
     const matchId = (url.searchParams.get("matchId") || "live").trim();
-    const query = matchId ? { matchId } : {};
+    const includePending = url.searchParams.get("includePending") === "1";
+
+    const token = getTokenFromCookieHeader(request.headers.get("cookie"));
+    const isAdmin = verifyAdminToken(token);
+
+    const query: Record<string, unknown> = matchId ? { matchId } : {};
+    if (!(includePending && isAdmin)) {
+      query.approvalStatus = "approved";
+    }
 
     const photos = await PhotoModel.find(query).sort({ createdAt: -1 }).limit(50).lean();
     return NextResponse.json(photos);
@@ -21,10 +29,28 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const { url, publicId, matchId = "live", matchTitle = "Live Match" } = await request.json();
+    const {
+      url,
+      publicId,
+      matchId = "live",
+      matchTitle = "Live Match",
+      uploaderName = "Anonymous",
+      uploaderRole = "public",
+    } = await request.json();
+
     if (!url || !publicId) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
+
+    const token = getTokenFromCookieHeader(request.headers.get("cookie"));
+    const isAdmin = verifyAdminToken(token);
+
+    const forwardedFor = request.headers.get("x-forwarded-for") || "";
+    const remoteIp = forwardedFor.split(",")[0]?.trim() || request.headers.get("x-real-ip") || "";
+    const userAgent = request.headers.get("user-agent") || "";
+
+    const normalizedRole = isAdmin && uploaderRole === "admin" ? "admin" : "public";
+    const approvalStatus = normalizedRole === "admin" ? "approved" : "pending";
 
     await connectToDatabase();
     const photo = await PhotoModel.create({
@@ -32,10 +58,54 @@ export async function POST(request: Request) {
       publicId,
       matchId: String(matchId || "live"),
       matchTitle: String(matchTitle || "Live Match"),
+      approvalStatus,
+      uploaderName: String(uploaderName || "Anonymous").slice(0, 80),
+      uploaderRole: normalizedRole,
+      uploaderIp: remoteIp,
+      uploaderUserAgent: userAgent,
+      approvedAt: approvalStatus === "approved" ? new Date() : undefined,
+      approvedBy: approvalStatus === "approved" ? "admin" : "",
     });
     return NextResponse.json(photo);
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
+
+export async function PATCH(request: Request) {
+  try {
+    const token = getTokenFromCookieHeader(request.headers.get("cookie"));
+    if (!verifyAdminToken(token)) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const body = await request.json().catch(() => ({}));
+    const id = body?.id ? String(body.id) : "";
+    const approvalStatus = String(body?.approvalStatus || "");
+
+    if (!id || !["approved", "rejected", "pending"].includes(approvalStatus)) {
+      return NextResponse.json({ error: "Invalid moderation payload" }, { status: 400 });
+    }
+
+    await connectToDatabase();
+    const update: Record<string, unknown> = { approvalStatus };
+
+    if (approvalStatus === "approved") {
+      update.approvedAt = new Date();
+      update.approvedBy = "admin";
+    } else {
+      update.approvedAt = undefined;
+      update.approvedBy = "";
+    }
+
+    const photo = await PhotoModel.findByIdAndUpdate(id, { $set: update }, { new: true });
+    if (!photo) {
+      return NextResponse.json({ error: "Photo not found" }, { status: 404 });
+    }
+
+    return NextResponse.json(photo);
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message || "Could not moderate photo" }, { status: 500 });
   }
 }
 

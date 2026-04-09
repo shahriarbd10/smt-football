@@ -15,6 +15,7 @@ import {
   ZoomIn,
   ZoomOut,
   RotateCcw,
+  Check,
 } from "lucide-react";
 import useSWR from "swr";
 
@@ -26,6 +27,12 @@ type PhotoItem = {
   publicId?: string;
   matchId?: string;
   matchTitle?: string;
+  approvalStatus?: "pending" | "approved" | "rejected";
+  uploaderName?: string;
+  uploaderRole?: "public" | "admin";
+  uploaderIp?: string;
+  uploaderUserAgent?: string;
+  createdAt?: string;
 };
 
 type PhotoGalleryProps = {
@@ -36,7 +43,7 @@ type PhotoGalleryProps = {
 
 export default function PhotoGallery({ mode = "public", matchId = "live", matchTitle = "Live Match" }: PhotoGalleryProps) {
   const isAdmin = mode === "admin";
-  const galleryKey = `/api/photos?matchId=${encodeURIComponent(matchId || "live")}`;
+  const galleryKey = `/api/photos?matchId=${encodeURIComponent(matchId || "live")}${isAdmin ? "&includePending=1" : ""}`;
   const { data: photos, mutate } = useSWR(galleryKey, fetcher, { refreshInterval: 10000 });
   const [uploading, setUploading] = useState(false);
   const [showUpload, setShowUpload] = useState(false);
@@ -44,6 +51,8 @@ export default function PhotoGallery({ mode = "public", matchId = "live", matchT
   const [downloading, setDownloading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [zoomLevel, setZoomLevel] = useState(1);
+  const [uploaderName, setUploaderName] = useState("");
+  const [moderatingId, setModeratingId] = useState<string | null>(null);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   const photoList: PhotoItem[] = Array.isArray(photos) ? photos : [];
@@ -123,13 +132,21 @@ export default function PhotoGallery({ mode = "public", matchId = "live", matchT
           publicId: uploadData.public_id,
           matchId,
           matchTitle,
+          uploaderName: uploaderName.trim() || "Anonymous",
+          uploaderRole: isAdmin ? "admin" : "public",
         }),
       });
 
       if (!saveRes.ok) throw new Error("Failed to save photo metadata");
 
-      setMessage({ type: "success", text: "Moment uploaded successfully!" });
+      setMessage({
+        type: "success",
+        text: isAdmin
+          ? "Moment uploaded and approved."
+          : "Upload submitted. Awaiting admin approval.",
+      });
       mutate();
+      setUploaderName("");
       setTimeout(() => setShowUpload(false), 2000);
     } catch (err: any) {
       setMessage({ type: "error", text: err.message || "Upload failed" });
@@ -199,6 +216,34 @@ export default function PhotoGallery({ mode = "public", matchId = "live", matchT
     }
   }
 
+  async function handleModeration(photo: PhotoItem, approvalStatus: "approved" | "rejected") {
+    if (!photo._id) return;
+
+    try {
+      setModeratingId(photo._id);
+      const response = await fetch("/api/photos", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: photo._id, approvalStatus }),
+      });
+
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload?.error || "Moderation failed");
+      }
+
+      setMessage({
+        type: "success",
+        text: approvalStatus === "approved" ? "Image approved for public gallery." : "Image marked rejected.",
+      });
+      await mutate();
+    } catch (err: any) {
+      setMessage({ type: "error", text: err?.message || "Moderation failed" });
+    } finally {
+      setModeratingId(null);
+    }
+  }
+
   function closeModal() {
     setSelectedPhoto(null);
     setZoomLevel(1);
@@ -215,20 +260,23 @@ export default function PhotoGallery({ mode = "public", matchId = "live", matchT
           <span className="rounded-full border border-white/10 bg-black/30 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-white/60">
             {matchTitle}
           </span>
+        <button
+          onClick={() => setShowUpload(!showUpload)}
+          className="flex items-center gap-2 rounded-xl bg-emerald-500/10 px-4 py-2 text-xs font-bold text-emerald-500 transition-all hover:bg-emerald-500/20"
+        >
+          {showUpload ? <X size={14} /> : <Upload size={14} />}
+          {showUpload ? "Cancel" : isAdmin ? "Upload Moment" : "Submit Photo"}
+        </button>
         {isAdmin ? (
-          <button
-            onClick={() => setShowUpload(!showUpload)}
-            className="flex items-center gap-2 rounded-xl bg-emerald-500/10 px-4 py-2 text-xs font-bold text-emerald-500 transition-all hover:bg-emerald-500/20"
-          >
-            {showUpload ? <X size={14} /> : <Upload size={14} />}
-            {showUpload ? "Cancel" : "Upload Moment"}
-          </button>
+          <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-amber-300">
+            Pending: {photoList.filter((p) => p.approvalStatus === "pending").length}
+          </span>
         ) : null}
         </div>
       </div>
 
       <AnimatePresence>
-        {showUpload && isAdmin && (
+        {showUpload && (
           <motion.div
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: "auto", opacity: 1 }}
@@ -236,6 +284,15 @@ export default function PhotoGallery({ mode = "public", matchId = "live", matchT
             className="overflow-hidden"
           >
             <div className="glass-pane relative mb-6 rounded-2xl p-8 border border-white/5 bg-black/40">
+              {!isAdmin ? (
+                <input
+                  value={uploaderName}
+                  onChange={(e) => setUploaderName(e.target.value)}
+                  placeholder="Your name (optional)"
+                  className="mb-4 w-full rounded-xl border border-white/10 bg-black/35 px-3 py-2 text-xs font-bold text-white outline-none focus:border-emerald-500/40"
+                />
+              ) : null}
+
               <input
                 type="file"
                 accept="image/*"
@@ -261,10 +318,12 @@ export default function PhotoGallery({ mode = "public", matchId = "live", matchT
                     </div>
                     <div>
                       <p className="text-sm font-bold text-white uppercase tracking-wider">
-                        Click or drag to share a moment
+                        {isAdmin ? "Click or drag to upload match moment" : "Click or drag to submit your match photo"}
                       </p>
                       <p className="mt-1 text-xs text-white/40 uppercase font-bold tracking-[0.1em]">
-                        Cloudinary Optimized HD • Max 10MB
+                        {isAdmin
+                          ? "Approved instantly • Cloudinary optimized • Max 10MB"
+                          : "Submitted for admin approval • Cloudinary optimized • Max 10MB"}
                       </p>
                     </div>
                   </>
@@ -299,23 +358,40 @@ export default function PhotoGallery({ mode = "public", matchId = "live", matchT
               onClick={() => setSelectedPhoto(photo)}
             >
               {isAdmin ? (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleDelete(photo);
-                  }}
-                  disabled={deletingId === (photo._id || photo.publicId)}
-                  className="absolute right-2 top-2 z-20 rounded-full bg-black/70 p-2 text-rose-300 hover:bg-rose-500/20 disabled:opacity-60"
-                  title="Delete image"
-                  aria-label="Delete image"
-                >
-                  {deletingId === (photo._id || photo.publicId) ? (
-                    <Loader2 size={14} className="animate-spin" />
-                  ) : (
-                    <Trash2 size={14} />
-                  )}
-                </button>
+                <div className="absolute right-2 top-2 z-20 flex items-center gap-1">
+                  {photo.approvalStatus === "pending" ? (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleModeration(photo, "approved");
+                      }}
+                      disabled={moderatingId === photo._id}
+                      className="rounded-full bg-emerald-500/85 p-2 text-black hover:bg-emerald-400 disabled:opacity-60"
+                      title="Approve image"
+                      aria-label="Approve image"
+                    >
+                      {moderatingId === photo._id ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDelete(photo);
+                    }}
+                    disabled={deletingId === (photo._id || photo.publicId)}
+                    className="rounded-full bg-black/70 p-2 text-rose-300 hover:bg-rose-500/20 disabled:opacity-60"
+                    title="Delete image"
+                    aria-label="Delete image"
+                  >
+                    {deletingId === (photo._id || photo.publicId) ? (
+                      <Loader2 size={14} className="animate-spin" />
+                    ) : (
+                      <Trash2 size={14} />
+                    )}
+                  </button>
+                </div>
               ) : null}
 
               <img
@@ -325,7 +401,9 @@ export default function PhotoGallery({ mode = "public", matchId = "live", matchT
                 loading="lazy"
               />
               <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-white/70">
-                Tap to view
+                {isAdmin
+                  ? `${photo.approvalStatus || "pending"} • ${photo.uploaderName || "Anonymous"}`
+                  : "Tap to view"}
               </div>
             </motion.div>
           ))
