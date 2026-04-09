@@ -87,6 +87,7 @@ export default function AdminPanel() {
   const [minute, setMinute] = useState(1);
   const [eventType, setEventType] = useState<"goal" | "assist" | "foul" | "yellow" | "red">("goal");
   const [message, setMessage] = useState("");
+  const [scoreInputs, setScoreInputs] = useState<Record<"A" | "B", string>>({ A: "0", B: "0" });
 
   const unauthorized = error?.message === "UNAUTHORIZED";
 
@@ -129,6 +130,7 @@ export default function AdminPanel() {
   async function updateScore(teamKey: "A" | "B", score: number) {
     try {
       await patchMatch({ action: "setScore", teamKey, score });
+      setScoreInputs((prev) => ({ ...prev, [teamKey]: String(Math.max(0, score)) }));
       setMessage("Score updated.");
       await mutate();
     } catch (err) {
@@ -226,15 +228,16 @@ export default function AdminPanel() {
     }
   }
 
-  async function removeMatchEvent(eventId: string) {
-    if (!eventId) {
-      setMessage("Error: Event ID is missing.");
-      return;
-    }
+  async function removeMatchEvent(event: MatchEvent) {
     try {
       await patchMatch({
         action: "removeEvent",
-        eventId
+        eventId: event._id,
+        minute: event.minute,
+        teamKey: event.teamKey,
+        playerName: event.playerName,
+        type: event.type,
+        createdAt: event.createdAt,
       });
       mutate();
       setMessage("Event removed and stats rolled back.");
@@ -412,8 +415,30 @@ export default function AdminPanel() {
                          <div className={`h-3 w-3 rounded-full ${team.key === 'A' ? 'bg-emerald-500 shadow-[0_0_8px_#10b981]' : 'bg-amber-500 shadow-[0_0_8px_#f59e0b]'}`} />
                          <span className="font-bold text-white">{team.name}</span>
                       </div>
-                      <div className="flex items-center gap-4 text-white">
-                        <span className="text-3xl font-bold tabular-nums">{team.score}</span>
+                      <div className="flex items-center gap-3 text-white">
+                        <input
+                          type="number"
+                          min={0}
+                          value={scoreInputs[team.key] ?? String(team.score)}
+                          onChange={(e) => {
+                            const next = e.target.value;
+                            setScoreInputs((prev) => ({ ...prev, [team.key]: next }));
+                          }}
+                          className="w-20 rounded-lg border border-white/10 bg-black/40 px-2 py-1 text-right text-xl font-bold tabular-nums outline-none focus:border-emerald-500/40"
+                        />
+                        <button
+                          onClick={() => {
+                            const parsed = Number(scoreInputs[team.key]);
+                            if (Number.isNaN(parsed) || parsed < 0) {
+                              setMessage("Please enter a valid score.");
+                              return;
+                            }
+                            updateScore(team.key, parsed);
+                          }}
+                          className="rounded-lg bg-emerald-500 px-2 py-1 text-[10px] font-bold text-black"
+                        >
+                          Save
+                        </button>
                         <div className="flex gap-1">
                           <button 
                             onClick={() => updateScore(team.key, team.score - 1)}
@@ -530,11 +555,11 @@ export default function AdminPanel() {
                   {data.events.length === 0 ? (
                     <p className="text-center text-xs font-bold text-white/20 uppercase py-4">No events recorded</p>
                   ) : (
-                    data.events.map((event) => (
-                      <div key={event._id} className="flex items-center justify-between rounded-xl bg-black/40 p-3 border border-white/5">
+                    data.events.map((event, index) => (
+                      <div key={event._id ?? `${event.createdAt}-${event.playerName}-${event.minute}-${index}`} className="flex items-center justify-between rounded-xl bg-black/40 p-3 border border-white/5">
                         <div className="flex items-center gap-3">
                           <span className="flex h-6 w-6 items-center justify-center rounded bg-emerald-500/10 text-[10px] font-black text-emerald-500">
-                            {event.minute}'
+                            {event.minute}&apos;
                           </span>
                           <div>
                             <p className="text-[10px] font-black text-white uppercase">{event.playerName}</p>
@@ -542,7 +567,7 @@ export default function AdminPanel() {
                           </div>
                         </div>
                         <button 
-                          onClick={() => removeMatchEvent(event._id!)}
+                          onClick={() => removeMatchEvent(event)}
                           className="rounded-lg p-2 text-rose-500/40 hover:bg-rose-500/10 hover:text-rose-500 transition-colors"
                           title="Remove Event (Reverts Stats)"
                         >

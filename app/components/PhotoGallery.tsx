@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Camera, Upload, X, Image as ImageIcon, CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
+import { Camera, Upload, X, Image as ImageIcon, CheckCircle2, AlertCircle, Loader2, Download } from "lucide-react";
 import useSWR from "swr";
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
@@ -11,7 +11,11 @@ export default function PhotoGallery() {
   const { data: photos, mutate } = useSWR("/api/photos", fetcher, { refreshInterval: 10000 });
   const [uploading, setUploading] = useState(false);
   const [showUpload, setShowUpload] = useState(false);
+  const [selectedPhoto, setSelectedPhoto] = useState<string | null>(null);
+  const [downloading, setDownloading] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  const photoList = Array.isArray(photos) ? photos : [];
 
   async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -72,6 +76,32 @@ export default function PhotoGallery() {
       setMessage({ type: "error", text: err.message || "Upload failed" });
     } finally {
       setUploading(false);
+    }
+  }
+
+  async function handleDownload(photoUrl: string) {
+    try {
+      setDownloading(true);
+
+      const response = await fetch(photoUrl);
+      if (!response.ok) {
+        throw new Error("Could not download image");
+      }
+
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+
+      anchor.href = objectUrl;
+      anchor.download = `smt-match-${Date.now()}.jpg`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(objectUrl);
+    } catch {
+      window.open(photoUrl, "_blank", "noopener,noreferrer");
+    } finally {
+      setDownloading(false);
     }
   }
 
@@ -146,20 +176,21 @@ export default function PhotoGallery() {
       </AnimatePresence>
 
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
-        {photos?.length === 0 ? (
+        {photoList.length === 0 ? (
           <div className="col-span-full rounded-2xl border border-dashed border-white/10 py-12 text-center text-white/20">
             <ImageIcon size={32} className="mx-auto mb-2 opacity-10" />
             <p className="text-xs uppercase font-bold tracking-widest">No moments captured yet</p>
           </div>
         ) : (
-          photos?.map((photo: any, idx: number) => (
+          photoList.map((photo: any, idx: number) => (
             <motion.div
-              key={photo._id}
+              key={photo._id ?? `${photo.publicId ?? photo.url}-${idx}`}
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ delay: idx * 0.05 }}
               whileHover={{ scale: 1.02, zIndex: 10 }}
-              className="group aspect-video overflow-hidden rounded-2xl bg-black/40 ring-1 ring-white/10 hover:ring-emerald-500/30 transition-all shadow-xl hover:shadow-emerald-500/5"
+              className="group relative aspect-video cursor-zoom-in overflow-hidden rounded-2xl bg-black/40 ring-1 ring-white/10 hover:ring-emerald-500/30 transition-all shadow-xl hover:shadow-emerald-500/5"
+              onClick={() => setSelectedPhoto(photo.url)}
             >
               <img
                 src={photo.url}
@@ -167,10 +198,55 @@ export default function PhotoGallery() {
                 className="h-full w-full object-cover grayscale-[0.2] group-hover:grayscale-0 transition-all duration-500"
                 loading="lazy"
               />
+              <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-white/70">
+                Tap to view
+              </div>
             </motion.div>
           ))
         )}
       </div>
+
+      <AnimatePresence>
+        {selectedPhoto && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4"
+            onClick={() => setSelectedPhoto(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.92, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.92, opacity: 0 }}
+              className="relative max-h-[90vh] w-full max-w-5xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button
+                onClick={() => handleDownload(selectedPhoto)}
+                disabled={downloading}
+                className="absolute left-3 top-3 z-10 flex items-center gap-2 rounded-full bg-emerald-500 px-3 py-2 text-xs font-bold text-black disabled:opacity-70"
+                aria-label="Download image"
+              >
+                <Download size={14} />
+                {downloading ? "Downloading" : "Download"}
+              </button>
+              <button
+                onClick={() => setSelectedPhoto(null)}
+                className="absolute right-3 top-3 z-10 rounded-full bg-black/70 p-2 text-white"
+                aria-label="Close preview"
+              >
+                <X size={16} />
+              </button>
+              <img
+                src={selectedPhoto}
+                alt="Gallery preview"
+                className="max-h-[90vh] w-full rounded-2xl object-contain"
+              />
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

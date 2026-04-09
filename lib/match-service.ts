@@ -222,6 +222,39 @@ export async function setPlayerPosition(
 }
 
 export async function removeEvent(eventId: string) {
+  return removeEventByReference({ eventId });
+}
+
+type RemoveEventReference = {
+  eventId?: string;
+  minute?: number;
+  teamKey?: TeamKey;
+  playerName?: string;
+  type?: EventType;
+  createdAt?: string;
+};
+
+function normalizeEventId(eventId?: string) {
+  if (!eventId) return "";
+  const id = String(eventId).trim();
+
+  // Supports accidental object-like string payloads from different serializers.
+  if (id.startsWith("{") && id.includes("$oid")) {
+    const match = id.match(/[a-fA-F0-9]{24}/);
+    return match ? match[0] : "";
+  }
+
+  return id;
+}
+
+function toSafeIso(dateValue?: string | Date) {
+  if (!dateValue) return null;
+  const date = new Date(dateValue);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toISOString();
+}
+
+export async function removeEventByReference(reference: RemoveEventReference) {
   await connectToDatabase();
   const match = await MatchModel.findOne({ slug: MATCH_SLUG });
 
@@ -233,13 +266,65 @@ export async function removeEvent(eventId: string) {
     throw new Error("No events found in this match.");
   }
 
-  const eventIndex = match.events.findIndex((e: any) => {
-    const idStr = e._id ? e._id.toString() : "";
-    return idStr === eventId;
-  });
+  const normalizedId = normalizeEventId(reference.eventId);
+
+  let eventIndex = -1;
+
+  // 1) Primary match by _id when possible.
+  if (normalizedId) {
+    eventIndex = match.events.findIndex((e: { _id?: { toString: () => string } }) => {
+      if (!e._id) return false;
+      return e._id.toString() === normalizedId;
+    });
+  }
+
+  // 2) Fallback for production/legacy docs: match by event fields.
+  if (eventIndex === -1) {
+    const hasFallbackFields =
+      reference.minute !== undefined &&
+      reference.teamKey !== undefined &&
+      reference.playerName !== undefined &&
+      reference.type !== undefined;
+
+    if (hasFallbackFields) {
+      const referenceCreatedAt = toSafeIso(reference.createdAt);
+
+      eventIndex = match.events.findIndex(
+        (e: {
+          minute: number;
+          teamKey: string;
+          playerName: string;
+          type: string;
+          createdAt?: Date;
+        }) => {
+          if (
+            Number(e.minute) !== Number(reference.minute) ||
+            String(e.teamKey) !== String(reference.teamKey) ||
+            String(e.playerName) !== String(reference.playerName) ||
+            String(e.type) !== String(reference.type)
+          ) {
+            return false;
+          }
+
+          // If createdAt is available on both sides, enforce it.
+          const eventCreatedAt = toSafeIso(e.createdAt);
+          if (referenceCreatedAt && eventCreatedAt) {
+            return eventCreatedAt === referenceCreatedAt;
+          }
+
+          // If timestamps are missing/incompatible, field match is enough.
+          return true;
+        },
+      );
+    }
+  }
 
   if (eventIndex === -1) {
-    throw new Error(`Event with ID ${eventId} not found.`);
+    throw new Error(
+      normalizedId
+        ? `Event with ID ${normalizedId} not found.`
+        : "Event not found for provided details.",
+    );
   }
 
   const event = match.events[eventIndex];

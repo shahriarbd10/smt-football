@@ -7,7 +7,7 @@ import {
   setScore,
   setKickoffTime,
   setPlayerPosition,
-  removeEvent,
+  removeEventByReference,
   updatePlayerStat,
 } from "@/lib/match-service";
 import type { EventType, TeamKey } from "@/lib/match";
@@ -95,8 +95,15 @@ export async function PATCH(request: Request) {
     }
 
     if (action === "removeEvent") {
-      const { eventId } = body as any;
-      const result = await removeEvent(eventId);
+      const { eventId, minute, teamKey, playerName, type, createdAt } = body as any;
+      const result = await removeEventByReference({
+        eventId,
+        minute,
+        teamKey,
+        playerName,
+        type,
+        createdAt,
+      });
       return Response.json(result);
     }
 
