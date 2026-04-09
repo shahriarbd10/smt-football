@@ -4,10 +4,15 @@ import { PhotoModel } from "@/models/Photo";
 import { ADMIN_COOKIE_NAME, verifyAdminToken } from "@/lib/auth";
 import { createCloudinarySignature, getCloudinaryConfig } from "@/lib/cloudinary";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     await connectToDatabase();
-    const photos = await PhotoModel.find().sort({ createdAt: -1 }).limit(50).lean();
+
+    const url = new URL(request.url);
+    const matchId = (url.searchParams.get("matchId") || "live").trim();
+    const query = matchId ? { matchId } : {};
+
+    const photos = await PhotoModel.find(query).sort({ createdAt: -1 }).limit(50).lean();
     return NextResponse.json(photos);
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -16,13 +21,18 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const { url, publicId } = await request.json();
+    const { url, publicId, matchId = "live", matchTitle = "Live Match" } = await request.json();
     if (!url || !publicId) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 
     await connectToDatabase();
-    const photo = await PhotoModel.create({ url, publicId });
+    const photo = await PhotoModel.create({
+      url,
+      publicId,
+      matchId: String(matchId || "live"),
+      matchTitle: String(matchTitle || "Live Match"),
+    });
     return NextResponse.json(photo);
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });

@@ -46,6 +46,7 @@ export type UpcomingEventMemberStatus = {
   memberId: string;
   confirmed: boolean;
   paymentStatus: PaymentStatus;
+  paidAmount: number;
 };
 
 export type UpcomingEvent = {
@@ -53,6 +54,7 @@ export type UpcomingEvent = {
   title: string;
   eventDate: string;
   slotMinutes: number;
+  totalSlotFee: number;
   notes?: string;
   participants: UpcomingEventMemberStatus[];
 };

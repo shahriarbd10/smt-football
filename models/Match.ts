@@ -61,6 +61,7 @@ const UpcomingEventMemberStatusSchema = new Schema(
   {
     memberId: { type: String, required: true },
     confirmed: { type: Boolean, default: false },
+    paidAmount: { type: Number, default: 0 },
     paymentStatus: {
       type: String,
       enum: ["paid", "unpaid", "pending"],
@@ -76,6 +77,7 @@ const UpcomingEventSchema = new Schema(
     title: { type: String, required: true },
     eventDate: { type: Date, required: true },
     slotMinutes: { type: Number, default: 90 },
+    totalSlotFee: { type: Number, default: 0 },
     notes: { type: String, default: "" },
     participants: { type: [UpcomingEventMemberStatusSchema], default: [] },
   },

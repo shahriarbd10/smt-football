@@ -43,6 +43,8 @@ type Team = {
 type MatchData = {
   title: string;
   isLiveContext?: boolean;
+  currentMatchId?: string;
+  currentMatchTitle?: string;
   playersPerSide: 6 | 7;
   slotMinutes: number;
   elapsedMinutes: number;
@@ -551,7 +553,10 @@ export default function LiveMatchBoard() {
 
       {/* Photo Gallery Section */}
       <section className="glass-pane rounded-[2rem] p-6 lg:p-8">
-        <PhotoGallery />
+        <PhotoGallery
+          matchId={data.currentMatchId || "live"}
+          matchTitle={data.currentMatchTitle || data.title}
+        />
       </section>
     </main>
   );

@@ -12,6 +12,7 @@ import {
   setPlayersPerSide,
   setKickoffTime,
   setPlayerPosition,
+  setPlayerPositionsBulk,
   removeEventByReference,
   updateEventByReference,
   removeMember,
@@ -147,6 +148,16 @@ export async function PATCH(request: Request) {
       return Response.json(result);
     }
 
+    if (action === "setPlayerPositionsBulk") {
+      const result = await setPlayerPositionsBulk((body.positions || []) as Array<{
+        teamKey: TeamKey;
+        playerName: string;
+        x: number;
+        y: number;
+      }>);
+      return Response.json(result);
+    }
+
     if (action === "removeEvent") {
       const { eventId, matchId, minute, teamKey, playerName, type, createdAt } = body as any;
       const result = await removeEventByReference({
@@ -206,6 +217,7 @@ export async function PATCH(request: Request) {
         title: body.title as string,
         eventDate: body.eventDate as string,
         slotMinutes: Number(body.slotMinutes ?? 90),
+        totalSlotFee: Number(body.totalSlotFee ?? 0),
         notes: body.notes as string | undefined,
       });
       return Response.json(result);
@@ -222,6 +234,7 @@ export async function PATCH(request: Request) {
         memberId: body.memberId as string,
         confirmed: body.confirmed as boolean | undefined,
         paymentStatus: body.paymentStatus as "paid" | "unpaid" | "pending" | undefined,
+        paidAmount: Number(body.paidAmount ?? NaN),
       });
       return Response.json(result);
     }

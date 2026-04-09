@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useMemo, useRef, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import useSWR from "swr";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
@@ -70,6 +70,7 @@ type UpcomingEventMemberStatus = {
   memberId: string;
   confirmed: boolean;
   paymentStatus: PaymentStatus;
+  paidAmount: number;
 };
 
 type UpcomingEvent = {
@@ -77,6 +78,7 @@ type UpcomingEvent = {
   title: string;
   eventDate: string;
   slotMinutes: number;
+  totalSlotFee: number;
   notes?: string;
   participants: UpcomingEventMemberStatus[];
 };
@@ -137,13 +139,19 @@ export default function AdminPanel() {
   const [minute, setMinute] = useState(1);
   const [eventType, setEventType] = useState<"goal" | "assist" | "foul" | "yellow" | "red">("goal");
   const [selectedEventMatchId, setSelectedEventMatchId] = useState("live");
+  const [selectedGalleryMatchId, setSelectedGalleryMatchId] = useState("live");
+  const [pendingPositionChanges, setPendingPositionChanges] = useState<
+    Record<string, { teamKey: "A" | "B"; playerName: string; x: number; y: number }>
+  >({});
   const [message, setMessage] = useState("");
   const [scoreInputs, setScoreInputs] = useState<Record<"A" | "B", string>>({ A: "0", B: "0" });
   const [memberNameDraft, setMemberNameDraft] = useState("");
   const [eventTitleDraft, setEventTitleDraft] = useState("Weekly Futsal Slot");
   const [eventDateDraft, setEventDateDraft] = useState("");
   const [eventSlotDraft, setEventSlotDraft] = useState("90");
+  const [eventTotalSlotFeeDraft, setEventTotalSlotFeeDraft] = useState("0");
   const [eventNotesDraft, setEventNotesDraft] = useState("");
+  const [kickoffDraft, setKickoffDraft] = useState("");
   const [selectedUpcomingEventId, setSelectedUpcomingEventId] = useState("");
   const [selectedHistoryMatchId, setSelectedHistoryMatchId] = useState("");
   const [selectedCalendarDate, setSelectedCalendarDate] = useState(
@@ -164,7 +172,15 @@ export default function AdminPanel() {
     }
 
     const selected = data.upcomingEvents.find((event) => event.id === selectedUpcomingEventId);
-    return selected || data.upcomingEvents[0];
+    if (selected) return selected;
+
+    const now = Date.now();
+    const sorted = [...data.upcomingEvents].sort(
+      (a, b) => new Date(a.eventDate).getTime() - new Date(b.eventDate).getTime(),
+    );
+
+    const nextUpcoming = sorted.find((event) => new Date(event.eventDate).getTime() >= now);
+    return nextUpcoming || sorted[0];
   }, [data?.upcomingEvents, selectedUpcomingEventId]);
 
   const allEventDates = useMemo(() => {
@@ -221,6 +237,18 @@ export default function AdminPanel() {
     return data.matchHistory.find((item) => item.id === selectedHistoryMatchId) || data.matchHistory[0];
   }, [data?.matchHistory, selectedHistoryMatchId]);
 
+  useEffect(() => {
+    if (!data?.kickoffTime) return;
+
+    const date = new Date(data.kickoffTime);
+    if (Number.isNaN(date.getTime())) return;
+
+    const localValue = new Date(date.getTime() - new Date().getTimezoneOffset() * 60000)
+      .toISOString()
+      .slice(0, 16);
+    setKickoffDraft(localValue);
+  }, [data?.kickoffTime]);
+
   const eventLogMatchOptions = useMemo(() => {
     const upcoming = [...(data?.upcomingEvents || [])].sort(
       (a, b) => new Date(a.eventDate).getTime() - new Date(b.eventDate).getTime(),
@@ -237,6 +265,24 @@ export default function AdminPanel() {
 
   const selectedEventMatchTitle =
     eventLogMatchOptions.find((item) => item.id === selectedEventMatchId)?.title || "Live Match";
+
+  const galleryMatchOptions = useMemo(() => {
+    const map = new Map<string, string>();
+    map.set("live", "Live Match");
+
+    (data?.upcomingEvents || []).forEach((event) => {
+      map.set(event.id, `${event.title} (${new Date(event.eventDate).toLocaleDateString()})`);
+    });
+
+    (data?.matchHistory || []).forEach((record) => {
+      map.set(record.id, `${record.title} (${new Date(record.kickoffTime).toLocaleDateString()})`);
+    });
+
+    return Array.from(map.entries()).map(([id, title]) => ({ id, title }));
+  }, [data?.upcomingEvents, data?.matchHistory]);
+
+  const selectedGalleryMatchTitle =
+    galleryMatchOptions.find((item) => item.id === selectedGalleryMatchId)?.title || "Live Match";
 
   const selectedMatchTimelineEvents = useMemo(() => {
     const target = selectedEventMatchId || "live";
@@ -388,15 +434,33 @@ export default function AdminPanel() {
         mutate({ ...data!, teams: updatedTeams }, false);
       }
 
-      await patchMatch({
-        action: "setPlayerPosition",
-        teamKey,
-        playerName,
-        x,
-        y
-      });
+      setPendingPositionChanges((prev) => ({
+        ...prev,
+        [`${teamKey}:${playerName}`]: { teamKey, playerName, x, y },
+      }));
     } catch (err) {
-      setMessage("Failed to save position.");
+      setMessage("Failed to update position draft.");
+    }
+  }
+
+  async function saveTacticalSetup() {
+    const positions = Object.values(pendingPositionChanges);
+
+    if (positions.length === 0) {
+      setMessage("No tactical position changes to save.");
+      return;
+    }
+
+    try {
+      const updated = await patchMatch({
+        action: "setPlayerPositionsBulk",
+        positions,
+      });
+      mutate(updated, false);
+      setPendingPositionChanges({});
+      setMessage("Tactical setup saved and synced to public page.");
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Could not save tactical setup.");
     }
   }
 
@@ -518,11 +582,13 @@ export default function AdminPanel() {
 
     try {
       const parsedSlot = Number(eventSlotDraft);
+      const parsedTotalSlotFee = Number(eventTotalSlotFeeDraft);
       await patchMatch({
         action: "upsertUpcomingEvent",
         title: eventTitleDraft,
         eventDate: new Date(eventDateDraft).toISOString(),
         slotMinutes: Number.isNaN(parsedSlot) ? 90 : parsedSlot,
+        totalSlotFee: Number.isNaN(parsedTotalSlotFee) ? 0 : parsedTotalSlotFee,
         notes: eventNotesDraft,
       });
       setMessage("Upcoming slot created.");
@@ -551,6 +617,7 @@ export default function AdminPanel() {
       title: string;
       eventDate: string;
       slotMinutes: number;
+      totalSlotFee: number;
       notes?: string;
     },
   ) {
@@ -561,6 +628,7 @@ export default function AdminPanel() {
         title: payload.title,
         eventDate: payload.eventDate,
         slotMinutes: payload.slotMinutes,
+        totalSlotFee: payload.totalSlotFee,
         notes: payload.notes,
       });
       setMessage("Upcoming event updated.");
@@ -603,6 +671,27 @@ export default function AdminPanel() {
     }
   }
 
+  async function saveKickoffSchedule() {
+    if (!kickoffDraft) {
+      setMessage("Please select kickoff date and time.");
+      return;
+    }
+
+    const parsed = new Date(kickoffDraft);
+    if (Number.isNaN(parsed.getTime())) {
+      setMessage("Invalid kickoff date/time.");
+      return;
+    }
+
+    try {
+      const updated = await patchMatch({ action: "setKickoffTime", kickoffTime: parsed.toISOString() });
+      mutate(updated, false);
+      setMessage("Kickoff time updated by admin.");
+    } catch {
+      setMessage("Failed to update schedule.");
+    }
+  }
+
   async function endLiveMatch() {
     try {
       const updated = await patchMatch({ action: "endCurrentMatch" });
@@ -616,7 +705,7 @@ export default function AdminPanel() {
   async function setMemberAttendanceStatus(
     eventId: string,
     memberId: string,
-    partial: { confirmed?: boolean; paymentStatus?: PaymentStatus },
+    partial: { confirmed?: boolean; paymentStatus?: PaymentStatus; paidAmount?: number },
   ) {
     try {
       await patchMatch({ action: "setUpcomingMemberStatus", eventId, memberId, ...partial });
@@ -787,31 +876,17 @@ export default function AdminPanel() {
                   <div className="relative">
                     <input
                       type="datetime-local"
-                      value={(() => {
-                        try {
-                          const date = data.kickoffTime ? new Date(data.kickoffTime) : new Date();
-                          if (isNaN(date.getTime())) return new Date().toISOString().slice(0, 16);
-                          return new Date(date.getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16);
-                        } catch (e) {
-                          return new Date().toISOString().slice(0, 16);
-                        }
-                      })()}
-                      onChange={(e) => {
-                        try {
-                          const newTime = new Date(e.target.value).toISOString();
-                          patchMatch({ action: "setKickoffTime", kickoffTime: newTime })
-                            .then(() => {
-                              setMessage("Kickoff time updated.");
-                              mutate();
-                            })
-                            .catch(() => setMessage("Failed to update schedule."));
-                        } catch (err) {
-                          setMessage("Invalid date selection.");
-                        }
-                      }}
+                      value={kickoffDraft}
+                      onChange={(e) => setKickoffDraft(e.target.value)}
                       className="w-full rounded-xl border border-white/5 bg-black/40 px-4 py-3 text-white outline-none focus:border-emerald-500/30 transition-all font-bold"
                     />
                   </div>
+                  <button
+                    onClick={saveKickoffSchedule}
+                    className="rounded-xl bg-emerald-500 px-4 py-2 text-xs font-bold uppercase tracking-[0.16em] text-black"
+                  >
+                    Save Kickoff
+                  </button>
                   <p className="text-[10px] font-bold text-white/20 uppercase tracking-[0.2em] ml-2">UTC+6 Bangladesh Standard Time</p>
                   <p className="text-[10px] font-bold text-emerald-300/70 uppercase tracking-[0.2em] ml-2">
                     Auto starts when kickoff time matches current country time window
@@ -1143,7 +1218,29 @@ export default function AdminPanel() {
                   <CalendarDays className="text-emerald-500" size={20} aria-hidden="true" />
                   Public Gallery Management
                 </h2>
-                <PhotoGallery mode="admin" />
+
+                <div className="mb-4">
+                  <label className="mb-2 block text-[10px] font-bold uppercase tracking-[0.2em] text-white/45">
+                    Gallery Match Context
+                  </label>
+                  <select
+                    value={selectedGalleryMatchId}
+                    onChange={(e) => setSelectedGalleryMatchId(e.target.value)}
+                    className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm font-bold text-white outline-none focus:border-emerald-500/40"
+                  >
+                    {galleryMatchOptions.map((option) => (
+                      <option key={option.id} value={option.id}>
+                        {option.title}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <PhotoGallery
+                  mode="admin"
+                  matchId={selectedGalleryMatchId}
+                  matchTitle={selectedGalleryMatchTitle}
+                />
               </section>
             </motion.div>
           )}
@@ -1377,6 +1474,14 @@ export default function AdminPanel() {
                     placeholder="Slot minutes"
                     className="rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm font-bold text-white outline-none focus:border-emerald-500/40"
                   />
+                  <input
+                    type="number"
+                    min={0}
+                    value={eventTotalSlotFeeDraft}
+                    onChange={(e) => setEventTotalSlotFeeDraft(e.target.value)}
+                    placeholder="Total slot fee"
+                    className="rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm font-bold text-white outline-none focus:border-emerald-500/40"
+                  />
                   <button
                     onClick={addUpcomingEvent}
                     className="rounded-xl bg-emerald-500 px-3 py-2 text-xs font-bold text-black"
@@ -1415,7 +1520,7 @@ export default function AdminPanel() {
                             >
                               <p className="text-sm font-bold text-white">{event.title}</p>
                               <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/45">
-                                {date.toLocaleString()} | {event.slotMinutes} min
+                                {date.toLocaleString()} | {event.slotMinutes} min | Fee {event.totalSlotFee}
                               </p>
                             </button>
                             <button
@@ -1523,6 +1628,7 @@ export default function AdminPanel() {
                                 title: e.target.value,
                                 eventDate: event.eventDate,
                                 slotMinutes: event.slotMinutes,
+                                totalSlotFee: event.totalSlotFee,
                                 notes: event.notes,
                               });
                             }
@@ -1542,6 +1648,7 @@ export default function AdminPanel() {
                                   title: event.title,
                                   eventDate: new Date(e.target.value).toISOString(),
                                   slotMinutes: event.slotMinutes,
+                                  totalSlotFee: event.totalSlotFee,
                                   notes: event.notes,
                                 });
                               }}
@@ -1572,6 +1679,7 @@ export default function AdminPanel() {
                                 title: event.title,
                                 eventDate: event.eventDate,
                                 slotMinutes: val,
+                                totalSlotFee: event.totalSlotFee,
                                 notes: event.notes,
                               });
                             }}
@@ -1664,13 +1772,38 @@ export default function AdminPanel() {
                   </p>
                 ) : (
                   <div className="space-y-2">
+                    {(() => {
+                      const participantsWithDefaults = data.members.map((member) =>
+                        selectedUpcomingEvent.participants.find((item) => item.memberId === member.id) ||
+                        ({ confirmed: false, paymentStatus: "pending", paidAmount: 0 } as UpcomingEventMemberStatus),
+                      );
+
+                      const totalPaid = participantsWithDefaults.reduce(
+                        (sum, participant) => sum + Number(participant.paidAmount || 0),
+                        0,
+                      );
+
+                      return (
+                        <div className="mb-3 grid gap-3 sm:grid-cols-2">
+                          <div className="rounded-xl border border-white/10 bg-black/30 p-3">
+                            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/50">Total Slot Fee</p>
+                            <p className="mt-1 text-2xl font-black text-white">{selectedUpcomingEvent.totalSlotFee || 0}</p>
+                          </div>
+                          <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3">
+                            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-300">Total Paid</p>
+                            <p className="mt-1 text-2xl font-black text-emerald-200">{Math.round(totalPaid * 100) / 100}</p>
+                          </div>
+                        </div>
+                      );
+                    })()}
+
                     {data.members.map((member) => {
                       const participant =
                         selectedUpcomingEvent.participants.find((item) => item.memberId === member.id) ||
-                        ({ confirmed: false, paymentStatus: "pending" } as UpcomingEventMemberStatus);
+                        ({ confirmed: false, paymentStatus: "pending", paidAmount: 0 } as UpcomingEventMemberStatus);
 
                       return (
-                        <div key={member.id} className="grid grid-cols-[1.5fr_auto_auto] items-center gap-3 rounded-xl border border-white/10 bg-black/25 p-3">
+                        <div key={member.id} className="grid grid-cols-[1.3fr_auto_auto_auto] items-center gap-3 rounded-xl border border-white/10 bg-black/25 p-3">
                           <p className="text-sm font-bold text-white">{member.name}</p>
 
                           <label className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.14em] text-white/70">
@@ -1699,6 +1832,20 @@ export default function AdminPanel() {
                             <option value="unpaid">Unpaid</option>
                             <option value="pending">Pending</option>
                           </select>
+
+                          <input
+                            type="number"
+                            min={0}
+                            step="0.01"
+                            value={participant.paidAmount ?? 0}
+                            onChange={(e) =>
+                              setMemberAttendanceStatus(selectedUpcomingEvent.id, member.id, {
+                                paidAmount: Number(e.target.value),
+                              })
+                            }
+                            className="w-28 rounded-lg border border-white/10 bg-black/40 px-2 py-1 text-xs font-bold text-white outline-none focus:border-emerald-500/40"
+                            placeholder="Paid"
+                          />
                         </div>
                       );
                     })}
@@ -1719,11 +1866,25 @@ export default function AdminPanel() {
               <section className="glass-pane rounded-[2rem] p-6 md:p-8">
                 <div className="mb-4 flex items-center justify-between">
                   <h3 className="text-xl font-bold text-white uppercase">Shared Tactical Drag Board</h3>
-                  <div className="flex items-center gap-2 rounded-full bg-black/40 px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-white/60">
-                    <MousePointer2 size={12} className="text-emerald-500" />
-                    Drag and drop on marked spots
+                  <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 rounded-full bg-black/40 px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-white/60">
+                      <MousePointer2 size={12} className="text-emerald-500" />
+                      Drag and drop on marked spots
+                    </div>
+                    <button
+                      onClick={saveTacticalSetup}
+                      className="flex items-center gap-2 rounded-xl bg-emerald-500/15 px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-emerald-300 hover:bg-emerald-500/25"
+                    >
+                      <Save size={12} /> Save Setup
+                    </button>
                   </div>
                 </div>
+
+                {Object.keys(pendingPositionChanges).length > 0 ? (
+                  <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.18em] text-amber-300">
+                    {Object.keys(pendingPositionChanges).length} unsaved position change(s)
+                  </p>
+                ) : null}
 
                 <div className="rounded-[2rem] border border-white/10 bg-black/30 p-2">
                   <TacticalCanvas

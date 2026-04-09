@@ -24,15 +24,20 @@ type PhotoItem = {
   _id?: string;
   url: string;
   publicId?: string;
+  matchId?: string;
+  matchTitle?: string;
 };
 
 type PhotoGalleryProps = {
   mode?: "public" | "admin";
+  matchId?: string;
+  matchTitle?: string;
 };
 
-export default function PhotoGallery({ mode = "public" }: PhotoGalleryProps) {
+export default function PhotoGallery({ mode = "public", matchId = "live", matchTitle = "Live Match" }: PhotoGalleryProps) {
   const isAdmin = mode === "admin";
-  const { data: photos, mutate } = useSWR("/api/photos", fetcher, { refreshInterval: 10000 });
+  const galleryKey = `/api/photos?matchId=${encodeURIComponent(matchId || "live")}`;
+  const { data: photos, mutate } = useSWR(galleryKey, fetcher, { refreshInterval: 10000 });
   const [uploading, setUploading] = useState(false);
   const [showUpload, setShowUpload] = useState(false);
   const [selectedPhoto, setSelectedPhoto] = useState<PhotoItem | null>(null);
@@ -116,6 +121,8 @@ export default function PhotoGallery({ mode = "public" }: PhotoGalleryProps) {
         body: JSON.stringify({
           url: uploadData.secure_url,
           publicId: uploadData.public_id,
+          matchId,
+          matchTitle,
         }),
       });
 
@@ -204,6 +211,10 @@ export default function PhotoGallery({ mode = "public" }: PhotoGalleryProps) {
           <Camera className="text-emerald-400" size={24} />
           {isAdmin ? "Gallery Control Room" : "Session Gallery"}
         </h3>
+        <div className="flex items-center gap-2">
+          <span className="rounded-full border border-white/10 bg-black/30 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-white/60">
+            {matchTitle}
+          </span>
         {isAdmin ? (
           <button
             onClick={() => setShowUpload(!showUpload)}
@@ -213,6 +224,7 @@ export default function PhotoGallery({ mode = "public" }: PhotoGalleryProps) {
             {showUpload ? "Cancel" : "Upload Moment"}
           </button>
         ) : null}
+        </div>
       </div>
 
       <AnimatePresence>

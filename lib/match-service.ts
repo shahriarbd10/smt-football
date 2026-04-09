@@ -261,7 +261,7 @@ export async function getLatestMatchForPublic() {
   }
 
   if (!match) {
-    return { ...defaultMatch, isLiveContext: false } as any;
+    return { ...defaultMatch, isLiveContext: false, currentMatchId: "live", currentMatchTitle: defaultMatch.title } as any;
   }
 
   if (isCurrentlyLive(match)) {
@@ -269,6 +269,8 @@ export async function getLatestMatchForPublic() {
       ...match,
       events: (match.events || []).filter((event: any) => String(event.matchId || "live") === "live"),
       isLiveContext: true,
+      currentMatchId: "live",
+      currentMatchTitle: match.title,
     };
   }
 
@@ -281,6 +283,8 @@ export async function getLatestMatchForPublic() {
       ...match,
       events: (match.events || []).filter((event: any) => String(event.matchId || "live") === "live"),
       isLiveContext: false,
+      currentMatchId: "live",
+      currentMatchTitle: match.title,
     };
   }
 
@@ -294,6 +298,8 @@ export async function getLatestMatchForPublic() {
     events: latestRecord.events,
     kickoffTime: latestRecord.kickoffTime,
     isLiveContext: false,
+    currentMatchId: latestRecord.id,
+    currentMatchTitle: latestRecord.title,
   };
 }
 
@@ -345,6 +351,37 @@ export async function getOrCreateMatch() {
     if (!match.upcomingEvents || !Array.isArray(match.upcomingEvents)) {
       await MatchModel.updateOne({ slug: MATCH_SLUG }, { $set: { upcomingEvents: [] } });
       match = await MatchModel.findOne({ slug: MATCH_SLUG }).lean();
+    }
+
+    if (
+      Array.isArray(match.upcomingEvents) &&
+      match.upcomingEvents.some(
+        (event: any) =>
+          typeof event.totalSlotFee !== "number" ||
+          !Array.isArray(event.participants) ||
+          event.participants.some((participant: any) => typeof participant.paidAmount !== "number"),
+      )
+    ) {
+      const matchDoc = await MatchModel.findOne({ slug: MATCH_SLUG });
+      if (matchDoc) {
+        matchDoc.upcomingEvents.forEach((event: any) => {
+          if (typeof event.totalSlotFee !== "number") {
+            event.totalSlotFee = 0;
+          }
+
+          if (!Array.isArray(event.participants)) {
+            event.participants = [];
+          }
+
+          event.participants.forEach((participant: any) => {
+            if (typeof participant.paidAmount !== "number") {
+              participant.paidAmount = 0;
+            }
+          });
+        });
+        await matchDoc.save();
+        match = await MatchModel.findOne({ slug: MATCH_SLUG }).lean();
+      }
     }
 
     if (!match.matchLifecycle || !["scheduled", "live", "ended"].includes(String(match.matchLifecycle))) {
@@ -870,6 +907,35 @@ export async function setPlayerPosition(
   return match.toObject();
 }
 
+export async function setPlayerPositionsBulk(
+  positions: Array<{
+    teamKey: TeamKey;
+    playerName: string;
+    x: number;
+    y: number;
+  }>,
+) {
+  await connectToDatabase();
+  const match = await MatchModel.findOne({ slug: MATCH_SLUG });
+
+  if (!match) {
+    throw new Error("Match data not found.");
+  }
+
+  for (const item of positions) {
+    const team = match.teams.find((t: { key: TeamKey }) => t.key === item.teamKey);
+    if (!team) continue;
+
+    const player = team.players.find((p: { name: string }) => p.name === item.playerName);
+    if (!player) continue;
+
+    player.position = { x: item.x, y: item.y };
+  }
+
+  await match.save();
+  return match.toObject();
+}
+
 export async function removeEvent(eventId: string) {
   return removeEventByReference({ eventId });
 }
@@ -1091,11 +1157,12 @@ export async function upsertMember(member: { id?: string; name: string }) {
     match.members[memberIndex].name = trimmedName;
   } else {
     match.members.push({ id: memberId, name: trimmedName });
-    match.upcomingEvents.forEach((event: { participants: Array<{ memberId: string; confirmed: boolean; paymentStatus: PaymentStatus }> }) => {
+    match.upcomingEvents.forEach((event: { participants: Array<{ memberId: string; confirmed: boolean; paymentStatus: PaymentStatus; paidAmount: number }> }) => {
       event.participants.push({
         memberId,
         confirmed: false,
         paymentStatus: "pending",
+        paidAmount: 0,
       });
     });
   }
@@ -1126,6 +1193,7 @@ export async function upsertUpcomingEvent(eventInput: {
   title: string;
   eventDate: string;
   slotMinutes: number;
+  totalSlotFee?: number;
   notes?: string;
 }) {
   await connectToDatabase();
@@ -1152,6 +1220,7 @@ export async function upsertUpcomingEvent(eventInput: {
     match.upcomingEvents[index].title = title;
     match.upcomingEvents[index].eventDate = eventDate;
     match.upcomingEvents[index].slotMinutes = Math.max(30, Number(eventInput.slotMinutes || 90));
+    match.upcomingEvents[index].totalSlotFee = Math.max(0, Number(eventInput.totalSlotFee ?? match.upcomingEvents[index].totalSlotFee ?? 0));
     match.upcomingEvents[index].notes = String(eventInput.notes || "");
   } else {
     match.upcomingEvents.push({
@@ -1159,11 +1228,13 @@ export async function upsertUpcomingEvent(eventInput: {
       title,
       eventDate,
       slotMinutes: Math.max(30, Number(eventInput.slotMinutes || 90)),
+      totalSlotFee: Math.max(0, Number(eventInput.totalSlotFee ?? 0)),
       notes: String(eventInput.notes || ""),
       participants: match.members.map((member: { id: string }) => ({
         memberId: member.id,
         confirmed: false,
         paymentStatus: "pending",
+        paidAmount: 0,
       })),
     });
   }
@@ -1213,6 +1284,7 @@ export async function setUpcomingMemberStatus(input: {
   memberId: string;
   confirmed?: boolean;
   paymentStatus?: PaymentStatus;
+  paidAmount?: number;
 }) {
   await connectToDatabase();
   const match = await MatchModel.findOne({ slug: MATCH_SLUG });
@@ -1233,6 +1305,7 @@ export async function setUpcomingMemberStatus(input: {
       memberId: input.memberId,
       confirmed: false,
       paymentStatus: "pending",
+      paidAmount: 0,
     };
     event.participants.push(participant);
   }
@@ -1243,6 +1316,10 @@ export async function setUpcomingMemberStatus(input: {
 
   if (input.paymentStatus) {
     participant.paymentStatus = input.paymentStatus;
+  }
+
+  if (typeof input.paidAmount === "number" && !Number.isNaN(input.paidAmount)) {
+    participant.paidAmount = Math.max(0, Math.round(input.paidAmount * 100) / 100);
   }
 
   await match.save();
