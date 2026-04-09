@@ -97,48 +97,6 @@ export function TacticalCanvas({ teamA, teamB, playersPerSide = 6, isEditable, o
     return nearest;
   };
 
-  const snapToNearestAvailablePosition = (
-    team: Team,
-    playerName: string,
-    side: "left" | "right",
-    x: number,
-    y: number,
-  ) => {
-    const positions = getDefaultPositions(playersPerSide, side);
-    const starters = team.players.filter((p) => p.isStarter).slice(0, playersPerSide);
-
-    const distances = positions
-      .map((position, index) => ({
-        index,
-        position,
-        distance: Math.hypot(position.x - x, position.y - y),
-      }))
-      .sort((a, b) => a.distance - b.distance);
-
-    const occupied = new Set<number>();
-
-    starters.forEach((starter, starterIndex) => {
-      if (starter.name === playerName) return;
-
-      const fallback = positions[starterIndex] || positions[0];
-      const position = starter.position || fallback;
-
-      const nearest = positions
-        .map((target, targetIndex) => ({
-          targetIndex,
-          distance: Math.hypot(target.x - position.x, target.y - position.y),
-        }))
-        .sort((a, b) => a.distance - b.distance)[0];
-
-      if (nearest) {
-        occupied.add(nearest.targetIndex);
-      }
-    });
-
-    const firstAvailable = distances.find((candidate) => !occupied.has(candidate.index));
-    return firstAvailable?.position || snapToNearestPosition(x, y, side);
-  };
-
   const renderPlayers = (team: Team, side: "left" | "right", color: string) => {
     const starters = team.players.filter((p) => p.isStarter);
     const defaultPositions = getDefaultPositions(playersPerSide, side);
@@ -166,8 +124,8 @@ export function TacticalCanvas({ teamA, teamB, playersPerSide = 6, isEditable, o
           : Math.min(Math.max(newX, 52), 98);
         const clampedY = Math.min(Math.max(newY, 5), 95);
 
-        // Snap drop to the nearest tactical marker for stable positioning in 6v6/7v7.
-        const snapped = snapToNearestAvailablePosition(team, player.name, side, clampedX, clampedY);
+        // Snap drop to nearest tactical marker so every intentional drag produces a saved position change.
+        const snapped = snapToNearestPosition(clampedX, clampedY, side);
 
         onPlayerPositionChange(team.key, player.name, snapped.x, snapped.y);
       };
