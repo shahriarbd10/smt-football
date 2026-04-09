@@ -77,13 +77,19 @@ export function TacticalCanvas({ teamA, teamB, playersPerSide = 6, isEditable, o
     ));
   };
 
-  const snapToNearestPosition = (x: number, y: number, side: "left" | "right") => {
+  const snapToNearestPosition = (
+    x: number,
+    y: number,
+    side: "left" | "right",
+    isGoalkeeper: boolean,
+  ) => {
     const positions = getDefaultPositions(playersPerSide, side);
+    const candidates = isGoalkeeper ? [positions[0]] : positions.slice(1);
 
-    let nearest = positions[0];
+    let nearest = candidates[0] || positions[0];
     let nearestDistance = Number.POSITIVE_INFINITY;
 
-    positions.forEach((position) => {
+    candidates.forEach((position) => {
       const dx = position.x - x;
       const dy = position.y - y;
       const distance = Math.sqrt(dx * dx + dy * dy);
@@ -98,15 +104,64 @@ export function TacticalCanvas({ teamA, teamB, playersPerSide = 6, isEditable, o
   };
 
   const renderPlayers = (team: Team, side: "left" | "right", color: string) => {
-    const starters = team.players.filter((p) => p.isStarter);
+    const starters = team.players.filter((p) => p.isStarter).slice(0, playersPerSide);
     const defaultPositions = getDefaultPositions(playersPerSide, side);
+    const goalkeeperAnchor = defaultPositions[0];
+
+    const slots = defaultPositions.map((position, index) => ({ position, index }));
+    const availableOutfieldSlots = slots.filter((slot) => slot.index !== 0);
+
+    const displayPositionByPlayer = new Map<string, { x: number; y: number }>();
+
+    // Keep goalkeeper fixed on the dedicated GK anchor.
+    starters.forEach((player) => {
+      if (player.isGoalkeeper) {
+        displayPositionByPlayer.set(player.name, goalkeeperAnchor);
+      }
+    });
+
+    starters.forEach((player) => {
+      if (player.isGoalkeeper) return;
+
+      if (availableOutfieldSlots.length === 0) {
+        displayPositionByPlayer.set(player.name, defaultPositions[defaultPositions.length - 1]);
+        return;
+      }
+
+      const preferred = player.position;
+
+      if (!preferred) {
+        const fallback = availableOutfieldSlots.shift();
+        if (fallback) {
+          displayPositionByPlayer.set(player.name, fallback.position);
+        }
+        return;
+      }
+
+      let nearestSlotIndex = 0;
+      let nearestDistance = Number.POSITIVE_INFINITY;
+
+      availableOutfieldSlots.forEach((slot, slotIndex) => {
+        const distance = Math.hypot(slot.position.x - preferred.x, slot.position.y - preferred.y);
+        if (distance < nearestDistance) {
+          nearestDistance = distance;
+          nearestSlotIndex = slotIndex;
+        }
+      });
+
+      const [chosen] = availableOutfieldSlots.splice(nearestSlotIndex, 1);
+      if (chosen) {
+        displayPositionByPlayer.set(player.name, chosen.position);
+      }
+    });
 
     return starters.slice(0, playersPerSide).map((player, index) => {
       let x, y;
       
-      if (player.position) {
-        x = player.position.x;
-        y = player.position.y;
+      const resolved = displayPositionByPlayer.get(player.name);
+      if (resolved) {
+        x = resolved.x;
+        y = resolved.y;
       } else {
         ({ x, y } = defaultPositions[index]);
       }
@@ -125,7 +180,7 @@ export function TacticalCanvas({ teamA, teamB, playersPerSide = 6, isEditable, o
         const clampedY = Math.min(Math.max(newY, 5), 95);
 
         // Snap drop to nearest tactical marker so every intentional drag produces a saved position change.
-        const snapped = snapToNearestPosition(clampedX, clampedY, side);
+        const snapped = snapToNearestPosition(clampedX, clampedY, side, false);
 
         onPlayerPositionChange(team.key, player.name, snapped.x, snapped.y);
       };
