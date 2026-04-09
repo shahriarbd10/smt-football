@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">SMT Football Logo</title>
+  <desc id="desc">A football-centered logo with green shield and stylized ball.</desc>
+  <defs>
+    <linearGradient id="shield" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0f8f70"/>
+      <stop offset="100%" stop-color="#0b3d2f"/>
+    </linearGradient>
+    <radialGradient id="ball" cx="50%" cy="45%" r="60%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#d9e1de"/>
+    </radialGradient>
+  </defs>
+
+  <path d="M256 26 438 98v126c0 133-88 226-182 262C162 450 74 357 74 224V98z" fill="url(#shield)"/>
+  <path d="M256 54 414 116v108c0 118-76 201-158 235C174 425 98 342 98 224V116z" fill="none" stroke="#8bf4d1" stroke-opacity=".4" stroke-width="14"/>
+
+  <circle cx="256" cy="236" r="126" fill="url(#ball)"/>
+  <circle cx="256" cy="236" r="126" fill="none" stroke="#0a2018" stroke-opacity=".22" stroke-width="10"/>
+
+  <polygon points="256,160 288,182 275,218 237,218 224,182" fill="#101a16"/>
+  <polygon points="209,239 233,257 224,287 193,287 182,257" fill="#101a16"/>
+  <polygon points="303,239 329,257 319,287 289,287 279,257" fill="#101a16"/>
+  <polygon points="239,295 274,295 286,329 256,350 226,329" fill="#101a16"/>
+  <polygon points="224,226 237,252 220,271 195,258 198,232" fill="#101a16"/>
+  <polygon points="275,252 288,226 314,232 317,258 292,271" fill="#101a16"/>
+
+  <text x="256" y="426" text-anchor="middle" fill="#d9fff3" font-family="Verdana, Geneva, Tahoma, sans-serif" font-size="44" font-weight="700" letter-spacing="3">SMT</text>
+</svg>
