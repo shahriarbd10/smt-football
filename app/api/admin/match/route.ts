@@ -3,6 +3,8 @@ import {
   getOrCreateMatch,
   recordEvent,
   setElapsedMinutes,
+  startMatchNow,
+  endCurrentMatch,
   setLineup,
   setMatchMetadata,
   setScore,
@@ -90,6 +92,16 @@ export async function PATCH(request: Request) {
 
     if (action === "setElapsedMinutes") {
       const result = await setElapsedMinutes(Number(body.elapsedMinutes ?? 0));
+      return Response.json(result);
+    }
+
+    if (action === "startMatchNow") {
+      const result = await startMatchNow({ resetLive: body.resetLive !== false });
+      return Response.json(result);
+    }
+
+    if (action === "endCurrentMatch") {
+      const result = await endCurrentMatch();
       return Response.json(result);
     }
 

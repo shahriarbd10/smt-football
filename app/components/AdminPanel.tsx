@@ -18,6 +18,8 @@ import {
   LayoutDashboard,
   Save,
   Activity,
+  Play,
+  Square,
   Calendar,
   CalendarDays,
   MousePointer2,
@@ -81,6 +83,7 @@ type UpcomingEvent = {
 
 type MatchData = {
   title: string;
+  matchLifecycle: "scheduled" | "live" | "ended";
   playersPerSide: 6 | 7;
   elapsedMinutes: number;
   slotMinutes: number;
@@ -279,6 +282,11 @@ export default function AdminPanel() {
   }
 
   async function updateClock(elapsedMinutes: number) {
+    if (data?.matchLifecycle !== "live") {
+      setMessage("Start match first to run the live clock.");
+      return;
+    }
+
     try {
       const updated = await patchMatch({ action: "setElapsedMinutes", elapsedMinutes });
       mutate(updated, false);
@@ -289,6 +297,11 @@ export default function AdminPanel() {
   }
 
   async function updateScore(teamKey: "A" | "B", score: number) {
+    if (data?.matchLifecycle !== "live") {
+      setMessage("Live score updates are allowed only while match is live.");
+      return;
+    }
+
     try {
       const updated = await patchMatch({ action: "setScore", teamKey, score });
       mutate(updated, false);
@@ -580,6 +593,26 @@ export default function AdminPanel() {
     }
   }
 
+  async function startLiveMatch(resetLive = true) {
+    try {
+      const updated = await patchMatch({ action: "startMatchNow", resetLive });
+      mutate(updated, false);
+      setMessage("Match started and live controls are active.");
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Could not start match.");
+    }
+  }
+
+  async function endLiveMatch() {
+    try {
+      const updated = await patchMatch({ action: "endCurrentMatch" });
+      mutate(updated, false);
+      setMessage("Match ended and archived as record.");
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Could not end match.");
+    }
+  }
+
   async function setMemberAttendanceStatus(
     eventId: string,
     memberId: string,
@@ -691,20 +724,52 @@ export default function AdminPanel() {
                   Clock Sync
                 </h2>
                 <div className="space-y-6">
+                  <div className="flex items-center justify-between rounded-xl border border-white/10 bg-black/25 px-4 py-3">
+                    <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/50">Lifecycle</span>
+                    <span
+                      className={`rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] ${
+                        data.matchLifecycle === "live"
+                          ? "bg-emerald-500/20 text-emerald-300"
+                          : data.matchLifecycle === "ended"
+                            ? "bg-amber-500/20 text-amber-300"
+                            : "bg-sky-500/20 text-sky-300"
+                      }`}
+                    >
+                      {data.matchLifecycle}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => startLiveMatch(true)}
+                      className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-500 px-3 py-2 text-xs font-bold text-black"
+                    >
+                      <Play size={14} /> Start Match
+                    </button>
+                    <button
+                      onClick={endLiveMatch}
+                      className="inline-flex items-center justify-center gap-2 rounded-xl bg-rose-500 px-3 py-2 text-xs font-bold text-black"
+                    >
+                      <Square size={14} /> End Match
+                    </button>
+                  </div>
+
                   <div className="flex items-center justify-between rounded-2xl bg-black/20 p-6">
                     <span className="text-4xl font-bold text-white tabular-nums">{data.elapsedMinutes}′</span>
                     <div className="flex gap-2">
                        <button 
                         onClick={() => updateClock(Math.max(0, data.elapsedMinutes - 1))}
                         aria-label="Decrease minute"
-                        className="h-12 w-12 flex items-center justify-center rounded-xl bg-white/5 hover:bg-white/10 text-white transition-all active:scale-95"
+                        disabled={data.matchLifecycle !== "live"}
+                        className="h-12 w-12 flex items-center justify-center rounded-xl bg-white/5 text-white transition-all active:scale-95 enabled:hover:bg-white/10 disabled:opacity-40"
                       >
                         <Minus size={20} />
                       </button>
                       <button 
                          onClick={() => updateClock(Math.min(data.slotMinutes, data.elapsedMinutes + 1))}
                          aria-label="Increase minute"
-                        className="h-12 w-12 flex items-center justify-center rounded-xl bg-emerald-500 text-black transition-all active:scale-95 shadow-lg shadow-emerald-500/10"
+                        disabled={data.matchLifecycle !== "live"}
+                        className="h-12 w-12 flex items-center justify-center rounded-xl bg-emerald-500 text-black transition-all active:scale-95 shadow-lg shadow-emerald-500/10 disabled:opacity-40"
                       >
                         <Plus size={20} />
                       </button>
@@ -748,6 +813,9 @@ export default function AdminPanel() {
                     />
                   </div>
                   <p className="text-[10px] font-bold text-white/20 uppercase tracking-[0.2em] ml-2">UTC+6 Bangladesh Standard Time</p>
+                  <p className="text-[10px] font-bold text-emerald-300/70 uppercase tracking-[0.2em] ml-2">
+                    Auto starts when kickoff time matches current country time window
+                  </p>
                 </div>
               </section>
 

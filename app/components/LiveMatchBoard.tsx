@@ -42,6 +42,7 @@ type Team = {
 
 type MatchData = {
   title: string;
+  isLiveContext?: boolean;
   playersPerSide: 6 | 7;
   slotMinutes: number;
   elapsedMinutes: number;
@@ -222,9 +223,7 @@ export default function LiveMatchBoard() {
   const topAssist = getLeaders((player) => player.assists);
   const topFouls = getLeaders((player) => player.fouls);
   const topYellow = getLeaders((player) => player.yellowCards);
-  const timelineEvents = data.events
-    .filter((event) => (event.matchId || "live") === "live")
-    .sort((a, b) => {
+  const timelineEvents = [...data.events].sort((a, b) => {
     if (a.minute !== b.minute) {
       return a.minute - b.minute;
     }
@@ -233,6 +232,7 @@ export default function LiveMatchBoard() {
   });
 
   const timelineFeed = [...timelineEvents].reverse();
+  const isLiveContext = Boolean(data.isLiveContext);
 
   // Countdown Logic
   const kickoffDate = data.kickoffTime ? new Date(data.kickoffTime) : null;
@@ -303,9 +303,9 @@ export default function LiveMatchBoard() {
                 animate={{ opacity: 1, x: 0 }}
               >
                 <div className="mb-2 flex items-center gap-2">
-                  <span className="live-indicator" />
-                  <span className="text-[10px] font-bold tracking-[0.4em] text-emerald-400 uppercase">
-                    Live Futsal Experience
+                  <span className={isLiveContext ? "live-indicator" : "h-2 w-2 rounded-full bg-amber-400"} />
+                  <span className={`text-[10px] font-bold tracking-[0.4em] uppercase ${isLiveContext ? "text-emerald-400" : "text-amber-300"}`}>
+                    {isLiveContext ? "Live Futsal Experience" : "Match Record"}
                   </span>
                 </div>
                 <h1 className="text-5xl font-bold text-white leading-tight lg:text-7xl">

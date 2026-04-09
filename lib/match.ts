@@ -1,6 +1,7 @@
 export type TeamKey = "A" | "B";
 export type EventType = "goal" | "assist" | "foul" | "yellow" | "red";
 export type PaymentStatus = "paid" | "unpaid" | "pending";
+export type MatchLifecycle = "scheduled" | "live" | "ended";
 
 export type Player = {
   name: string;
@@ -59,6 +60,7 @@ export type UpcomingEvent = {
 export type MatchData = {
   slug: string;
   title: string;
+  matchLifecycle: MatchLifecycle;
   playersPerSide: 6 | 7;
   slotMinutes: number;
   elapsedMinutes: number;
@@ -124,6 +126,7 @@ const initialMembers: Member[] = [
 export const defaultMatch: Omit<MatchData, "updatedAt"> = {
   slug: "smt-futsal-session",
   title: "SMT Football Tournament Night",
+  matchLifecycle: "scheduled",
   playersPerSide: 6,
   slotMinutes: 90,
   elapsedMinutes: 0,

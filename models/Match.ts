@@ -101,6 +101,7 @@ const MatchSchema = new Schema(
   {
     slug: { type: String, required: true, unique: true },
     title: { type: String, required: true },
+    matchLifecycle: { type: String, enum: ["scheduled", "live", "ended"], default: "scheduled" },
     playersPerSide: { type: Number, enum: [6, 7], default: 6 },
     slotMinutes: { type: Number, required: true, default: 90 },
     elapsedMinutes: { type: Number, required: true, default: 0 },

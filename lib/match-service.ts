@@ -1,6 +1,7 @@
 import {
   defaultMatch,
   type EventType,
+  type MatchLifecycle,
   type PaymentStatus,
   type TeamKey,
 } from "@/lib/match";
@@ -95,17 +96,205 @@ function rebuildHistoryRecordFromGlobalEvents(match: any, matchId: string, match
   record.updatedAt = new Date();
 }
 
+function hasAnyLiveData(match: any) {
+  const hasScoreOrCards = (match.teams || []).some(
+    (team: any) =>
+      Number(team.score || 0) > 0 ||
+      Number(team.teamFouls || 0) > 0 ||
+      Number(team.yellowCards || 0) > 0 ||
+      Number(team.redCards || 0) > 0 ||
+      (team.players || []).some(
+        (player: any) =>
+          Number(player.goals || 0) > 0 ||
+          Number(player.assists || 0) > 0 ||
+          Number(player.fouls || 0) > 0 ||
+          Number(player.yellowCards || 0) > 0 ||
+          Number(player.redCards || 0) > 0,
+      ),
+  );
+
+  const hasLiveEvents = (match.events || []).some(
+    (event: any) => String(event.matchId || "live") === "live",
+  );
+
+  return hasScoreOrCards || hasLiveEvents || Number(match.elapsedMinutes || 0) > 0;
+}
+
+function isCurrentlyLive(match: any) {
+  const lifecycle = String(match.matchLifecycle || "scheduled") as MatchLifecycle;
+  if (lifecycle === "ended") return false;
+  if (lifecycle === "live") return true;
+
+  return isWithinScheduledWindow(match);
+}
+
+function isWithinScheduledWindow(match: any) {
+  const kickoff = new Date(match.kickoffTime || Date.now());
+  if (Number.isNaN(kickoff.getTime())) return false;
+
+  const now = Date.now();
+  const slotMinutes = Math.max(30, Number(match.slotMinutes || 90));
+  const liveWindowEnd = kickoff.getTime() + (slotMinutes + 15) * 60 * 1000;
+
+  if (now < kickoff.getTime() || now > liveWindowEnd) {
+    return false;
+  }
+
+  return true;
+}
+
+function upsertSnapshotFromLive(match: any, snapshotId?: string) {
+  if (!hasAnyLiveData(match)) return;
+
+  if (!Array.isArray(match.matchHistory)) {
+    match.matchHistory = [];
+  }
+
+  const kickoff = new Date(match.kickoffTime || Date.now());
+  const dayKey = Number.isNaN(kickoff.getTime())
+    ? new Date().toISOString().slice(0, 10)
+    : kickoff.toISOString().slice(0, 10);
+  const recordId = snapshotId || `record-${dayKey}`;
+
+  const liveEvents = (match.events || [])
+    .filter((event: any) => String(event.matchId || "live") === "live")
+    .map((event: any) => ({
+      _id: event._id,
+      matchId: recordId,
+      matchTitle: match.title,
+      minute: event.minute,
+      teamKey: event.teamKey,
+      playerName: event.playerName,
+      type: event.type,
+      createdAt: event.createdAt,
+    }));
+
+  const payload = {
+    id: recordId,
+    title: match.title,
+    playersPerSide: match.playersPerSide || 6,
+    slotMinutes: match.slotMinutes || 90,
+    elapsedMinutes: match.elapsedMinutes || 0,
+    teams: JSON.parse(JSON.stringify(match.teams || [])),
+    events: liveEvents,
+    kickoffTime: kickoff,
+    updatedAt: new Date(),
+  };
+
+  const existingIndex = match.matchHistory.findIndex((record: any) => record.id === recordId);
+  if (existingIndex >= 0) {
+    match.matchHistory[existingIndex] = payload;
+  } else {
+    match.matchHistory.push(payload);
+  }
+}
+
+function resetLiveBoard(match: any) {
+  match.elapsedMinutes = 0;
+  match.teams.forEach((team: any) => {
+    team.score = 0;
+    team.teamFouls = 0;
+    team.yellowCards = 0;
+    team.redCards = 0;
+
+    team.players.forEach((player: any) => {
+      player.goals = 0;
+      player.assists = 0;
+      player.fouls = 0;
+      player.yellowCards = 0;
+      player.redCards = 0;
+    });
+  });
+
+  match.events = (match.events || []).filter(
+    (event: any) => String(event.matchId || "live") !== "live",
+  );
+}
+
+export async function startMatchNow(input?: { resetLive?: boolean }) {
+  await connectToDatabase();
+  const match = await MatchModel.findOne({ slug: MATCH_SLUG });
+
+  if (!match) {
+    throw new Error("Match data not found.");
+  }
+
+  const shouldReset = input?.resetLive !== false;
+  if (shouldReset) {
+    resetLiveBoard(match);
+  }
+
+  match.matchLifecycle = "live";
+  match.kickoffTime = new Date();
+  await match.save();
+  return match.toObject();
+}
+
+export async function endCurrentMatch() {
+  await connectToDatabase();
+  const match = await MatchModel.findOne({ slug: MATCH_SLUG });
+
+  if (!match) {
+    throw new Error("Match data not found.");
+  }
+
+  const kickoff = new Date(match.kickoffTime || Date.now());
+  const idSeed = Number.isNaN(kickoff.getTime())
+    ? new Date().toISOString()
+    : kickoff.toISOString();
+  const snapshotId = `record-${idSeed.slice(0, 16).replace(/[:T]/g, "-")}`;
+
+  upsertSnapshotFromLive(match, snapshotId);
+  match.matchLifecycle = "ended";
+  await match.save();
+  return match.toObject();
+}
+
 export async function getLatestMatchForPublic() {
   await connectToDatabase();
 
-  let match = await MatchModel.findOne().sort({ updatedAt: -1 }).lean();
+  let match = await MatchModel.findOne({ slug: MATCH_SLUG }).lean();
 
   if (!match) {
     await MatchModel.create(defaultMatch);
-    match = await MatchModel.findOne().sort({ updatedAt: -1 }).lean();
+    match = await MatchModel.findOne({ slug: MATCH_SLUG }).lean();
   }
 
-  return match;
+  if (!match) {
+    return { ...defaultMatch, isLiveContext: false } as any;
+  }
+
+  if (isCurrentlyLive(match)) {
+    return {
+      ...match,
+      events: (match.events || []).filter((event: any) => String(event.matchId || "live") === "live"),
+      isLiveContext: true,
+    };
+  }
+
+  const history = Array.isArray(match.matchHistory) ? [...match.matchHistory] : [];
+  history.sort((a: any, b: any) => new Date(b.kickoffTime).getTime() - new Date(a.kickoffTime).getTime());
+  const latestRecord = history[0];
+
+  if (!latestRecord) {
+    return {
+      ...match,
+      events: (match.events || []).filter((event: any) => String(event.matchId || "live") === "live"),
+      isLiveContext: false,
+    };
+  }
+
+  return {
+    ...match,
+    title: latestRecord.title,
+    playersPerSide: latestRecord.playersPerSide,
+    slotMinutes: latestRecord.slotMinutes,
+    elapsedMinutes: latestRecord.elapsedMinutes,
+    teams: latestRecord.teams,
+    events: latestRecord.events,
+    kickoffTime: latestRecord.kickoffTime,
+    isLiveContext: false,
+  };
 }
 
 export async function getOrCreateMatch() {
@@ -158,6 +347,11 @@ export async function getOrCreateMatch() {
       match = await MatchModel.findOne({ slug: MATCH_SLUG }).lean();
     }
 
+    if (!match.matchLifecycle || !["scheduled", "live", "ended"].includes(String(match.matchLifecycle))) {
+      await MatchModel.updateOne({ slug: MATCH_SLUG }, { $set: { matchLifecycle: "scheduled" } });
+      match = await MatchModel.findOne({ slug: MATCH_SLUG }).lean();
+    }
+
     if (!match.matchHistory || !Array.isArray(match.matchHistory)) {
       await MatchModel.updateOne({ slug: MATCH_SLUG }, { $set: { matchHistory: [] } });
       match = await MatchModel.findOne({ slug: MATCH_SLUG }).lean();
@@ -184,6 +378,11 @@ export async function getOrCreateMatch() {
 
     if (!match.playersPerSide || ![6, 7].includes(Number(match.playersPerSide))) {
       await MatchModel.updateOne({ slug: MATCH_SLUG }, { $set: { playersPerSide: 6 } });
+      match = await MatchModel.findOne({ slug: MATCH_SLUG }).lean();
+    }
+
+    if (String(match.matchLifecycle) === "scheduled" && isWithinScheduledWindow(match)) {
+      await MatchModel.updateOne({ slug: MATCH_SLUG }, { $set: { matchLifecycle: "live" } });
       match = await MatchModel.findOne({ slug: MATCH_SLUG }).lean();
     }
   }
@@ -259,6 +458,10 @@ export async function recordEvent(
 
   if (!match) {
     throw new Error("Match data not found.");
+  }
+
+  if (String(matchId) === "live" && !isCurrentlyLive(match)) {
+    throw new Error("Live match has not started yet. Start now or wait for kickoff time.");
   }
 
   const team = match.teams.find((t: { key: TeamKey }) => t.key === teamKey);
@@ -416,6 +619,15 @@ function findEventIndexByReference(
 export async function setElapsedMinutes(elapsedMinutes: number) {
   await connectToDatabase();
 
+  const current = await MatchModel.findOne({ slug: MATCH_SLUG });
+  if (!current) {
+    throw new Error("Match data not found.");
+  }
+
+  if (!isCurrentlyLive(current)) {
+    throw new Error("Live match has not started yet.");
+  }
+
   const match = await MatchModel.findOneAndUpdate(
     { slug: MATCH_SLUG },
     {
@@ -439,6 +651,10 @@ export async function setScore(teamKey: TeamKey, score: number) {
 
   if (!match) {
     throw new Error("Match data not found.");
+  }
+
+  if (!isCurrentlyLive(match)) {
+    throw new Error("Live score updates are allowed only during an active match.");
   }
 
   const team = match.teams.find((t: { key: TeamKey }) => t.key === teamKey);
@@ -523,15 +739,28 @@ export async function setTeamStats(
 
 export async function setKickoffTime(kickoffTime: string) {
   await connectToDatabase();
-  const match = await MatchModel.findOneAndUpdate(
-    { slug: MATCH_SLUG },
-    { $set: { kickoffTime: new Date(kickoffTime) } },
-    { new: true },
-  );
+  const match = await MatchModel.findOne({ slug: MATCH_SLUG });
 
   if (!match) {
     throw new Error("Match data not found.");
   }
+
+  const nextKickoff = new Date(kickoffTime);
+  if (Number.isNaN(nextKickoff.getTime())) {
+    throw new Error("Invalid kickoff time.");
+  }
+
+  const previousKickoff = new Date(match.kickoffTime || Date.now());
+  const prevDay = Number.isNaN(previousKickoff.getTime()) ? "" : previousKickoff.toISOString().slice(0, 10);
+  const nextDay = nextKickoff.toISOString().slice(0, 10);
+
+  if (prevDay && prevDay !== nextDay) {
+    upsertSnapshotFromLive(match, `record-${prevDay}`);
+  }
+
+  match.kickoffTime = nextKickoff;
+  match.matchLifecycle = "scheduled";
+  await match.save();
 
   return match.toObject();
 }
