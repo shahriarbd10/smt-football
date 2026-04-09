@@ -4,15 +4,26 @@ import {
   recordEvent,
   setElapsedMinutes,
   setLineup,
+  setMatchMetadata,
   setScore,
+  setTeamStats,
+  setPlayersPerSide,
   setKickoffTime,
   setPlayerPosition,
   removeEventByReference,
+  updateEventByReference,
+  removeMember,
+  removeUpcomingEvent,
+  setUpcomingMemberStatus,
+  upsertMember,
+  upsertUpcomingEvent,
   updatePlayerStat,
 } from "@/lib/match-service";
 import type { EventType, TeamKey } from "@/lib/match";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 function unauthorized() {
   return Response.json({ error: "Unauthorized" }, { status: 401 });
@@ -31,7 +42,11 @@ export async function GET(request: Request) {
   }
 
   const match = await getOrCreateMatch();
-  return Response.json(match);
+  return Response.json(match, {
+    headers: {
+      "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+    },
+  });
 }
 
 export async function PATCH(request: Request) {
@@ -83,6 +98,29 @@ export async function PATCH(request: Request) {
       return Response.json(result);
     }
 
+    if (action === "setMatchMetadata") {
+      const result = await setMatchMetadata({
+        title: body.title as string | undefined,
+        slotMinutes: Number(body.slotMinutes ?? NaN),
+      });
+      return Response.json(result);
+    }
+
+    if (action === "setTeamStats") {
+      const result = await setTeamStats(body.teamKey as TeamKey, {
+        score: Number(body.score ?? NaN),
+        teamFouls: Number(body.teamFouls ?? NaN),
+        yellowCards: Number(body.yellowCards ?? NaN),
+        redCards: Number(body.redCards ?? NaN),
+      });
+      return Response.json(result);
+    }
+
+    if (action === "setPlayersPerSide") {
+      const result = await setPlayersPerSide(Number(body.playersPerSide) as 6 | 7);
+      return Response.json(result);
+    }
+
     if (action === "setKickoffTime") {
       const result = await setKickoffTime(body.kickoffTime as string);
       return Response.json(result);
@@ -107,9 +145,65 @@ export async function PATCH(request: Request) {
       return Response.json(result);
     }
 
+    if (action === "updateEvent") {
+      const result = await updateEventByReference({
+        reference: {
+          eventId: body.eventId as string | undefined,
+          minute: body.minute as number | undefined,
+          teamKey: body.teamKey as "A" | "B" | undefined,
+          playerName: body.playerName as string | undefined,
+          type: body.type as EventType | undefined,
+          createdAt: body.createdAt as string | undefined,
+        },
+        updates: {
+          minute: body.newMinute as number | undefined,
+          teamKey: body.newTeamKey as TeamKey | undefined,
+          playerName: body.newPlayerName as string | undefined,
+          type: body.newType as EventType | undefined,
+        },
+      });
+      return Response.json(result);
+    }
+
     if (action === "updatePlayerStat") {
       const { teamKey, playerName, stat, increment } = body as any;
       const result = await updatePlayerStat(teamKey, playerName, stat, increment);
+      return Response.json(result);
+    }
+
+    if (action === "upsertMember") {
+      const result = await upsertMember({ id: body.id as string | undefined, name: body.name as string });
+      return Response.json(result);
+    }
+
+    if (action === "removeMember") {
+      const result = await removeMember(body.memberId as string);
+      return Response.json(result);
+    }
+
+    if (action === "upsertUpcomingEvent") {
+      const result = await upsertUpcomingEvent({
+        id: body.id as string | undefined,
+        title: body.title as string,
+        eventDate: body.eventDate as string,
+        slotMinutes: Number(body.slotMinutes ?? 90),
+        notes: body.notes as string | undefined,
+      });
+      return Response.json(result);
+    }
+
+    if (action === "removeUpcomingEvent") {
+      const result = await removeUpcomingEvent(body.eventId as string);
+      return Response.json(result);
+    }
+
+    if (action === "setUpcomingMemberStatus") {
+      const result = await setUpcomingMemberStatus({
+        eventId: body.eventId as string,
+        memberId: body.memberId as string,
+        confirmed: body.confirmed as boolean | undefined,
+        paymentStatus: body.paymentStatus as "paid" | "unpaid" | "pending" | undefined,
+      });
       return Response.json(result);
     }
 

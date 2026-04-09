@@ -47,14 +47,50 @@ const MatchEventSchema = new Schema(
   { _id: true },
 );
 
+const MemberSchema = new Schema(
+  {
+    id: { type: String, required: true },
+    name: { type: String, required: true },
+  },
+  { _id: false },
+);
+
+const UpcomingEventMemberStatusSchema = new Schema(
+  {
+    memberId: { type: String, required: true },
+    confirmed: { type: Boolean, default: false },
+    paymentStatus: {
+      type: String,
+      enum: ["paid", "unpaid", "pending"],
+      default: "pending",
+    },
+  },
+  { _id: false },
+);
+
+const UpcomingEventSchema = new Schema(
+  {
+    id: { type: String, required: true },
+    title: { type: String, required: true },
+    eventDate: { type: Date, required: true },
+    slotMinutes: { type: Number, default: 90 },
+    notes: { type: String, default: "" },
+    participants: { type: [UpcomingEventMemberStatusSchema], default: [] },
+  },
+  { _id: false },
+);
+
 const MatchSchema = new Schema(
   {
     slug: { type: String, required: true, unique: true },
     title: { type: String, required: true },
+    playersPerSide: { type: Number, enum: [6, 7], default: 6 },
     slotMinutes: { type: Number, required: true, default: 90 },
     elapsedMinutes: { type: Number, required: true, default: 0 },
     teams: { type: [TeamSchema], default: [] },
     events: { type: [MatchEventSchema], default: [] },
+    members: { type: [MemberSchema], default: [] },
+    upcomingEvents: { type: [UpcomingEventSchema], default: [] },
     kickoffTime: { type: Date, default: () => new Date("2026-04-08T18:00:00+06:00") },
   },
   { timestamps: true },

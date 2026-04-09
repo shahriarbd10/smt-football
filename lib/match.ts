@@ -1,5 +1,6 @@
 export type TeamKey = "A" | "B";
 export type EventType = "goal" | "assist" | "foul" | "yellow" | "red";
+export type PaymentStatus = "paid" | "unpaid" | "pending";
 
 export type Player = {
   name: string;
@@ -33,13 +34,36 @@ export type MatchEvent = {
   _id?: string;
 };
 
+export type Member = {
+  id: string;
+  name: string;
+};
+
+export type UpcomingEventMemberStatus = {
+  memberId: string;
+  confirmed: boolean;
+  paymentStatus: PaymentStatus;
+};
+
+export type UpcomingEvent = {
+  id: string;
+  title: string;
+  eventDate: string;
+  slotMinutes: number;
+  notes?: string;
+  participants: UpcomingEventMemberStatus[];
+};
+
 export type MatchData = {
   slug: string;
   title: string;
+  playersPerSide: 6 | 7;
   slotMinutes: number;
   elapsedMinutes: number;
   teams: Team[];
   events: MatchEvent[];
+  members: Member[];
+  upcomingEvents: UpcomingEvent[];
   updatedAt: string;
   kickoffTime: string;
 };
@@ -59,9 +83,33 @@ const makePlayer = (
   assists: 0,
 });
 
+const initialMembers: Member[] = [
+  "Saikot",
+  "OMAR",
+  "EMON",
+  "Mynul",
+  "Imtiaz",
+  "Shahidul",
+  "Sharif",
+  "Arif",
+  "Rakib",
+  "Forhad",
+  "Nayem",
+  "Shahriar",
+  "Hasibul",
+  "Jamil",
+  "saidi",
+  "Sofiqul",
+  "Alok",
+].map((name) => ({
+  id: name.toLowerCase().replace(/\s+/g, "-"),
+  name,
+}));
+
 export const defaultMatch: Omit<MatchData, "updatedAt"> = {
   slug: "smt-futsal-session",
   title: "SMT Football Tournament Night",
+  playersPerSide: 6,
   slotMinutes: 90,
   elapsedMinutes: 0,
   teams: [
@@ -106,5 +154,7 @@ export const defaultMatch: Omit<MatchData, "updatedAt"> = {
     },
   ],
   events: [],
+  members: initialMembers,
+  upcomingEvents: [],
   kickoffTime: "2026-04-08T18:00:00+06:00",
 };

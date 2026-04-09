@@ -44,6 +44,7 @@ type Team = {
 
 type MatchData = {
   title: string;
+  playersPerSide: 6 | 7;
   slotMinutes: number;
   elapsedMinutes: number;
   teams: Team[];
@@ -58,7 +59,7 @@ type MatchData = {
 };
 
 const fetcher = async (url: string): Promise<MatchData> => {
-  const response = await fetch(url);
+  const response = await fetch(url, { cache: "no-store" });
   if (!response.ok) throw new Error("Could not load match");
   return response.json();
 };
@@ -146,6 +147,43 @@ export default function LiveMatchBoard() {
 
   const [teamA, teamB] = data.teams;
   const progress = Math.min((data.elapsedMinutes / data.slotMinutes) * 100, 100);
+  const playerPool = data.teams.flatMap((team) =>
+    team.players.map((player) => ({
+      ...player,
+      teamKey: team.key,
+    })),
+  );
+
+  const getLeaders = (
+    valueSelector: (player: (typeof playerPool)[number]) => number,
+  ) => {
+    const highest = Math.max(0, ...playerPool.map(valueSelector));
+    if (highest <= 0) {
+      return { names: "No leader yet", value: 0 };
+    }
+
+    const names = playerPool
+      .filter((player) => valueSelector(player) === highest)
+      .map((player) => `${player.name} (${player.teamKey})`)
+      .join(", ");
+
+    return {
+      names,
+      value: highest,
+    };
+  };
+
+  const topScorer = getLeaders((player) => player.goals);
+  const topAssist = getLeaders((player) => player.assists);
+  const topFouls = getLeaders((player) => player.fouls);
+  const topYellow = getLeaders((player) => player.yellowCards);
+  const timelineEvents = [...data.events].sort((a, b) => {
+    if (a.minute !== b.minute) {
+      return a.minute - b.minute;
+    }
+
+    return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+  });
 
   // Countdown Logic
   const kickoffDate = data.kickoffTime ? new Date(data.kickoffTime) : null;
@@ -332,6 +370,44 @@ export default function LiveMatchBoard() {
         </motion.div>
       </section>
 
+      <section className="glass-pane rounded-[2rem] p-6 lg:p-8">
+        <div className="mb-5 flex items-center justify-between">
+          <h3 className="flex items-center gap-2 text-2xl font-bold text-white">
+            <Trophy className="text-emerald-400" size={24} />
+            Match Leaders
+          </h3>
+          <span className="rounded-lg bg-emerald-500/10 px-3 py-1 text-xs font-bold text-emerald-300">
+            Highlighted Performance Stats
+          </span>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4">
+            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-emerald-200">Top Scorer</p>
+            <p className="mt-2 text-lg font-black text-white">{topScorer.names}</p>
+            <p className="mt-1 text-sm font-bold text-emerald-300">Goals: {topScorer.value}</p>
+          </div>
+
+          <div className="rounded-2xl border border-indigo-500/30 bg-indigo-500/10 p-4">
+            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-indigo-200">Top Assist</p>
+            <p className="mt-2 text-lg font-black text-white">{topAssist.names}</p>
+            <p className="mt-1 text-sm font-bold text-indigo-300">Assists: {topAssist.value}</p>
+          </div>
+
+          <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4">
+            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-200">Most Fouls</p>
+            <p className="mt-2 text-lg font-black text-white">{topFouls.names}</p>
+            <p className="mt-1 text-sm font-bold text-amber-300">Fouls: {topFouls.value}</p>
+          </div>
+
+          <div className="rounded-2xl border border-yellow-500/30 bg-yellow-500/10 p-4">
+            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-yellow-200">Most Yellow Cards</p>
+            <p className="mt-2 text-lg font-black text-white">{topYellow.names}</p>
+            <p className="mt-1 text-sm font-bold text-yellow-300">Yellow: {topYellow.value}</p>
+          </div>
+        </div>
+      </section>
+
       {/* Advanced Visualization Section */}
       <section className="grid gap-6 lg:grid-cols-[1.5fr_1fr]">
         <div className="glass-pane rounded-[2rem] p-6 lg:p-8">
@@ -341,10 +417,10 @@ export default function LiveMatchBoard() {
               Tactical Lineups
             </h3>
             <span className="rounded-lg bg-emerald-500/10 px-3 py-1 text-xs font-bold text-emerald-400">
-              6 ON 6 MODEL
+              {data.playersPerSide} VS {data.playersPerSide} MODEL
             </span>
           </div>
-          <TacticalCanvas teamA={teamA} teamB={teamB} />
+          <TacticalCanvas teamA={teamA} teamB={teamB} playersPerSide={data.playersPerSide} />
         </div>
 
         <div className="glass-pane flex flex-col rounded-[2rem] p-6 lg:p-8">
@@ -356,13 +432,13 @@ export default function LiveMatchBoard() {
           </div>
           <div className="flex-1 space-y-4 overflow-y-auto pr-2 custom-scrollbar max-h-[500px]">
             <AnimatePresence mode="popLayout">
-              {data.events.length === 0 ? (
+              {timelineEvents.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-12 text-center text-white/30">
                   <TrendingUp size={32} className="mb-2 opacity-20" />
                   <p className="text-sm">Ball is rolling. Waiting for events...</p>
                 </div>
               ) : (
-                data.events.map((event, index) => (
+                timelineEvents.map((event, index) => (
                   <motion.div
                     key={`${event.createdAt}-${index}`}
                     initial={{ opacity: 0, x: 20 }}
@@ -374,7 +450,7 @@ export default function LiveMatchBoard() {
                       <div className="z-10 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-black/40 border border-white/10 group-hover:border-emerald-500/30 transition-colors">
                         <EventIcon type={event.type} />
                       </div>
-                      {index < data.events.length - 1 && (
+                      {index < timelineEvents.length - 1 && (
                         <div className="h-full w-px bg-white/5" />
                       )}
                     </div>

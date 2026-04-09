@@ -20,27 +20,41 @@ interface Team {
 interface TacticalCanvasProps {
   teamA: Team;
   teamB: Team;
+  playersPerSide?: 6 | 7;
   isEditable?: boolean;
   onPlayerPositionChange?: (teamKey: "A" | "B", playerName: string, x: number, y: number) => void;
 }
 
-export function TacticalCanvas({ teamA, teamB, isEditable, onPlayerPositionChange }: TacticalCanvasProps) {
+export function TacticalCanvas({ teamA, teamB, playersPerSide = 6, isEditable, onPlayerPositionChange }: TacticalCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   const renderPlayers = (team: Team, side: "left" | "right", color: string) => {
     const starters = team.players.filter((p) => p.isStarter);
     
     // Default formation logic [x, y]
-    const defaultPositions = [
-      [8, 50],  // GK
-      [18, 28], // DEF Top
-      [18, 72], // DEF Bottom
-      [30, 20], // MID Top
-      [30, 80], // MID Bottom
-      [42, 50], // FWD
-    ];
+    const defaultPositionsByFormat: Record<number, Array<[number, number]>> = {
+      6: [
+        [8, 50],
+        [18, 28],
+        [18, 72],
+        [30, 20],
+        [30, 80],
+        [42, 50],
+      ],
+      7: [
+        [8, 50],
+        [18, 22],
+        [18, 78],
+        [30, 18],
+        [30, 50],
+        [30, 82],
+        [44, 50],
+      ],
+    };
 
-    return starters.slice(0, 6).map((player, index) => {
+    const defaultPositions = defaultPositionsByFormat[playersPerSide] || defaultPositionsByFormat[6];
+
+    return starters.slice(0, playersPerSide).map((player, index) => {
       let x, y;
       
       if (player.position) {
@@ -53,7 +67,7 @@ export function TacticalCanvas({ teamA, teamB, isEditable, onPlayerPositionChang
         }
       }
 
-      const handleDragEnd = (event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
+      const handleDragEnd = (_event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
         if (!isEditable || !onPlayerPositionChange || player.isGoalkeeper || !containerRef.current) return;
 
         const rect = containerRef.current.getBoundingClientRect();
@@ -66,55 +80,56 @@ export function TacticalCanvas({ teamA, teamB, isEditable, onPlayerPositionChang
           : Math.min(Math.max(newX, 52), 98);
         const clampedY = Math.min(Math.max(newY, 5), 95);
 
-        onPlayerPositionChange(team.key, player.name, clampedX, clampedY);
+        onPlayerPositionChange(team.key, player.name, Math.round(clampedX * 10) / 10, Math.round(clampedY * 10) / 10);
       };
 
       return (
-        <motion.div
+        <div
           key={`${team.name}-${player.name}`}
-          drag={isEditable && !player.isGoalkeeper}
-          dragConstraints={containerRef}
-          dragMomentum={false}
-          onDragEnd={handleDragEnd}
-          initial={false}
-          animate={{ x: 0, y: 0, scale: 1, opacity: 1 }}
-          whileHover={{ scale: 1.1, zIndex: 50 }}
-          whileDrag={{ scale: 1.2, zIndex: 60, cursor: "grabbing" }}
-          className={`absolute flex flex-col items-center justify-center gap-1.5 ${isEditable && !player.isGoalkeeper ? "cursor-grab" : ""}`}
-          style={{ 
-            left: `${x}%`, 
-            top: `${y}%`,
-            transform: "translate(-50%, -50%)",
-            zIndex: player.isGoalkeeper ? 10 : 20 
-          }}
+          className="absolute -translate-x-1/2 -translate-y-1/2"
+          style={{ left: `${x}%`, top: `${y}%`, zIndex: player.isGoalkeeper ? 10 : 20 }}
         >
-          <div 
-            className="flex h-11 w-11 items-center justify-center rounded-full border-2 border-white/50 text-[10px] font-bold shadow-2xl transition-transform"
-            style={{ 
-              backgroundColor: color,
-              color: "#fff",
-              boxShadow: `0 0 20px ${color}88`
-            }}
+          <motion.div
+            drag={Boolean(isEditable && !player.isGoalkeeper)}
+            dragConstraints={containerRef}
+            dragMomentum={false}
+            onDragEnd={handleDragEnd}
+            initial={false}
+            animate={{ x: 0, y: 0, scale: 1, opacity: 1 }}
+            whileHover={{ scale: 1.08, zIndex: 50 }}
+            whileDrag={{ scale: 1.15, zIndex: 60, cursor: "grabbing" }}
+            className={`flex touch-none flex-col items-center justify-center gap-1.5 ${
+              isEditable && !player.isGoalkeeper ? "cursor-grab" : ""
+            }`}
           >
-            {player.name.substring(0, 2).toUpperCase()}
-          </div>
-          <div className="whitespace-nowrap rounded-md bg-black/80 px-2 py-0.5 text-[9px] font-bold text-white backdrop-blur-md ring-1 ring-white/10 select-none">
-            {player.name}
-            {player.isGoalkeeper && " (GK)"}
-          </div>
-          <div className="absolute -right-2 -top-2 flex flex-col gap-1">
-            {player.goals > 0 && (
-              <div className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500 text-[10px] font-black text-white ring-2 ring-black shadow-lg" title="Goals">
-                {player.goals}
-              </div>
-            )}
-            {player.assists > 0 && (
-              <div className="flex h-5 w-5 items-center justify-center rounded-full bg-indigo-500 text-[10px] font-black text-white ring-2 ring-black shadow-lg" title="Assists">
-                {player.assists}
-              </div>
-            )}
-          </div>
-        </motion.div>
+            <div
+              className="flex h-11 w-11 items-center justify-center rounded-full border-2 border-white/50 text-[10px] font-bold shadow-2xl transition-transform"
+              style={{
+                backgroundColor: color,
+                color: "#fff",
+                boxShadow: `0 0 20px ${color}88`,
+              }}
+            >
+              {player.name.substring(0, 2).toUpperCase()}
+            </div>
+            <div className="whitespace-nowrap rounded-md bg-black/80 px-2 py-0.5 text-[9px] font-bold text-white backdrop-blur-md ring-1 ring-white/10 select-none">
+              {player.name}
+              {player.isGoalkeeper && " (GK)"}
+            </div>
+            <div className="absolute -right-2 -top-2 flex flex-col gap-1">
+              {player.goals > 0 && (
+                <div className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500 text-[10px] font-black text-white ring-2 ring-black shadow-lg" title="Goals">
+                  {player.goals}
+                </div>
+              )}
+              {player.assists > 0 && (
+                <div className="flex h-5 w-5 items-center justify-center rounded-full bg-indigo-500 text-[10px] font-black text-white ring-2 ring-black shadow-lg" title="Assists">
+                  {player.assists}
+                </div>
+              )}
+            </div>
+          </motion.div>
+        </div>
       );
     });
   };
