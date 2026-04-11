@@ -15,7 +15,8 @@ import {
   Camera,
   Eye,
   EyeOff,
-  Sparkles
+  Sparkles,
+  Calendar
 } from "lucide-react";
 import { MatchStatCard } from "./shared/MatchStatCard";
 import { TacticalCanvas } from "./shared/TacticalCanvas";
@@ -30,6 +31,7 @@ type Player = {
   yellowCards: number;
   redCards: number;
   assists: number;
+  imageUrl?: string;
 };
 
 type Team = {
@@ -295,116 +297,124 @@ export default function LiveMatchBoard() {
     <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-6 px-4 py-8 md:py-12">
       {showSpecialEvent && specialEvent ? (
         <motion.section
-          initial={{ opacity: 0, y: 24 }}
+          initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6 }}
-          className="relative overflow-hidden rounded-[2.2rem] border border-emerald-400/30 bg-[radial-gradient(circle_at_top_left,rgba(16,185,129,0.22),transparent_48%),radial-gradient(circle_at_bottom_right,rgba(245,158,11,0.18),transparent_52%),linear-gradient(120deg,rgba(2,20,23,0.95),rgba(4,39,45,0.92))] p-6 shadow-[0_0_40px_rgba(16,185,129,0.2)] md:p-8"
+          transition={{ duration: 0.8, ease: "easeOut" }}
+          className="group relative overflow-hidden rounded-[2.5rem] border border-white/10 bg-black/40 p-8 shadow-2xl md:p-12 lg:p-16"
         >
-          <div className="pointer-events-none absolute -left-20 -top-20 h-64 w-64 rounded-full bg-emerald-400/20 blur-[90px]" />
-          <div className="pointer-events-none absolute -bottom-16 -right-12 h-56 w-56 rounded-full bg-amber-300/20 blur-[80px]" />
+          {/* Animated Background Elements */}
+          <div className="absolute inset-0 z-0">
+             <div className="absolute -left-20 -top-20 h-[500px] w-[500px] rounded-full bg-emerald-500/10 blur-[120px] transition-all group-hover:bg-emerald-500/20" />
+             <div className="absolute -bottom-40 -right-20 h-[600px] w-[600px] rounded-full bg-amber-500/10 blur-[140px] transition-all group-hover:bg-amber-500/20" />
+             <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-[0.03] mix-blend-overlay" />
+          </div>
 
-          <div className="relative z-10 grid gap-6 lg:grid-cols-[1.35fr_1fr]">
-            <div>
-              <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-emerald-300/30 bg-black/30 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-200">
-                <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-                {specialEvent.badgeText || "Special Event"}
-              </div>
-
-              <h2 className="text-3xl font-black tracking-tight text-white md:text-5xl">
-                {specialEvent.title}
-              </h2>
-
-              <p className="mt-2 text-xl font-bold text-emerald-200 md:text-2xl">{specialEvent.subtitle}</p>
-
-              <div className="mt-5 flex flex-wrap items-center gap-3 text-xs font-bold uppercase tracking-[0.14em] text-white/80">
-                <span className="rounded-full border border-white/15 bg-black/40 px-3 py-1">{specialDateText}</span>
-                <span className="rounded-full border border-white/15 bg-black/40 px-3 py-1">{specialEvent.venue}</span>
-              </div>
-
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
+          <div className="relative z-10 grid gap-12 lg:grid-cols-[1.2fr_0.8fr]">
+            <div className="flex flex-col justify-center">
+              <motion.div 
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: 0.2 }}
-                className="mt-6 rounded-2xl border border-white/10 bg-black/30 p-4"
+                className="mb-8 inline-flex w-fit items-center gap-2 rounded-full border border-emerald-400/30 bg-emerald-400/10 px-4 py-1.5 text-[10px] font-black uppercase tracking-[0.2em] text-emerald-300"
               >
-                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/50">Mainstream Matchup</p>
-                <div className="mt-2 flex items-center gap-3 text-lg font-black text-white md:text-2xl">
-                  <span className="text-emerald-300">{specialEvent.homeTeamName}</span>
-                  <span className="text-white/30">vs</span>
-                  <span className="text-amber-300">{specialEvent.awayTeamName}</span>
-                </div>
+                <Sparkles size={14} className="animate-pulse" />
+                {specialEvent.badgeText || "Mainstream Feature Match"}
               </motion.div>
 
-              <div className="mt-5 rounded-2xl border border-white/10 bg-black/30 p-4">
-                <div className="mb-3 flex items-center gap-2">
-                  <Sparkles size={16} className="text-emerald-300" />
-                  <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/55">Match Vibe</p>
+              <motion.h2 
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.3 }}
+                className="text-5xl font-black leading-tight text-white md:text-7xl lg:text-8xl tracking-tighter"
+              >
+                {specialEvent.title.split(' ').map((word, i) => (
+                  <span key={i} className={i === 0 ? "text-emerald-400" : ""}>{word} </span>
+                ))}
+              </motion.h2>
+
+              <motion.p 
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.4 }}
+                className="mt-6 text-xl font-medium text-white/60 md:text-2xl"
+              >
+                {specialEvent.subtitle}
+              </motion.p>
+
+              <div className="mt-10 flex flex-wrap items-center gap-4">
+                <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur-md">
+                   <div className="h-10 w-10 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400">
+                      <Calendar size={20} />
+                   </div>
+                   <div>
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-white/30">Match Date</p>
+                      <p className="text-sm font-black text-white">{specialDateText}</p>
+                   </div>
                 </div>
-                <div className="grid gap-3 sm:grid-cols-3">
-                  {[
-                    {
-                      title: "Team Identity",
-                      subtitle: "SMT Gamma energy",
-                      image: "/images/team_a.png",
-                      glow: "from-emerald-500/35 to-cyan-400/10",
-                    },
-                    {
-                      title: "Big Rivalry",
-                      subtitle: "Gamma vs FSD",
-                      image: "/images/team_b.png",
-                      glow: "from-amber-500/35 to-red-400/10",
-                    },
-                    {
-                      title: "Fan Moment",
-                      subtitle: "Built for the crowd",
-                      image: "/images/team_a.png",
-                      glow: "from-sky-500/30 to-indigo-500/10",
-                    },
-                  ].map((item, idx) => (
-                    <motion.div
-                      key={item.title}
-                      initial={{ opacity: 0, y: 18 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: 0.25 + idx * 0.08 }}
-                      className={`relative overflow-hidden rounded-xl border border-white/10 bg-gradient-to-br ${item.glow} p-3`}
-                    >
-                      <div className="absolute -right-4 -top-4 h-14 w-14 rounded-full bg-white/20 blur-xl" />
-                      <div className="relative z-10 flex items-center gap-3">
-                        <div className="h-12 w-12 overflow-hidden rounded-lg border border-white/15 bg-black/20 p-1.5">
-                          <img src={item.image} alt={item.title} className="h-full w-full object-contain" />
-                        </div>
-                        <div>
-                          <p className="text-xs font-black text-white">{item.title}</p>
-                          <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-white/60">{item.subtitle}</p>
-                        </div>
-                      </div>
-                    </motion.div>
-                  ))}
+
+                <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur-md">
+                   <div className="h-10 w-10 rounded-full bg-amber-500/20 flex items-center justify-center text-amber-400">
+                      <Target size={20} />
+                   </div>
+                   <div>
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-white/30">Venue</p>
+                      <p className="text-sm font-black text-white">{specialEvent.venue}</p>
+                   </div>
                 </div>
               </div>
+
+              {isUpcomingSpecialContext && (
+                <div className="mt-12">
+                   <p className="mb-4 text-[10px] font-bold uppercase tracking-[0.4em] text-white/20">Countdown to Kickoff</p>
+                   <CountdownDisplay targetDate={specialEventDate!} />
+                </div>
+              )}
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
-              {[
-                { label: "GK", value: specialEvent.squad?.gk || [] },
-                { label: "CB", value: specialEvent.squad?.cb || [] },
-                { label: "CMF", value: specialEvent.squad?.cmf || [] },
-                { label: "CF", value: specialEvent.squad?.cf || [] },
-              ].map((line, idx) => (
-                <motion.div
-                  key={line.label}
-                  initial={{ opacity: 0, x: 24 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.15 + idx * 0.07 }}
-                  className="rounded-xl border border-white/10 bg-black/35 p-3"
-                >
-                  <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-emerald-300">{line.label}</p>
-                  <p className="mt-1 text-sm font-bold text-white">{line.value.length ? line.value.join(", ") : "TBD"}</p>
-                </motion.div>
-              ))}
+            <div className="relative flex items-center justify-center">
+               <div className="absolute inset-0 bg-gradient-to-tr from-emerald-500/20 to-amber-500/20 blur-[100px]" />
+               <motion.div 
+                 initial={{ scale: 0.8, opacity: 0 }}
+                 animate={{ scale: 1, opacity: 1 }}
+                 transition={{ delay: 0.5, duration: 1 }}
+                 className="relative z-10 w-full"
+               >
+                  {/* Digital Vibe Grid / Illustrations */}
+                  <div className="grid grid-cols-2 gap-4">
+                    {[
+                      { label: "Gamma Energy", img: "/images/team_a.png", color: "from-emerald-400/40" },
+                      { label: "Creative Force", img: "/images/team_b.png", color: "from-amber-400/40" },
+                    ].map((card, i) => (
+                      <motion.div
+                        key={i}
+                        whileHover={{ y: -10, rotate: i === 0 ? -2 : 2 }}
+                        className={`overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br ${card.color} to-transparent p-6 backdrop-blur-xl`}
+                      >
+                         <div className="mb-4 h-24 w-24 rounded-2xl bg-black/40 p-4 shadow-inner">
+                            <img src={card.img} alt="" className="h-full w-full object-contain" />
+                         </div>
+                         <p className="text-lg font-black text-white">{card.label}</p>
+                         <div className="mt-2 h-1 w-12 rounded-full bg-white/20" />
+                      </motion.div>
+                    ))}
+                    <motion.div 
+                      grid-column="span 2"
+                      className="col-span-2 overflow-hidden rounded-3xl border border-white/10 bg-white/5 p-6 backdrop-blur-xl"
+                    >
+                       <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">Visual Identity</p>
+                            <p className="text-xl font-black text-emerald-400">SMT GAMMA VS FSD</p>
+                          </div>
+                          <Sparkles size={24} className="text-amber-400" />
+                       </div>
+                    </motion.div>
+                  </div>
+               </motion.div>
             </div>
           </div>
         </motion.section>
+
       ) : null}
 
       <AnimatePresence mode="wait">
@@ -516,38 +526,37 @@ export default function LiveMatchBoard() {
       </AnimatePresence>
 
       {isHistoryContext || isUpcomingSpecialContext ? (
-        <section className="glass-pane rounded-[2rem] border border-amber-400/25 p-5 md:p-6">
-          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-300">Last Match Snapshot</p>
-              <h3 className="mt-1 text-2xl font-black text-white">{isUpcomingSpecialContext ? `${previewHomeTeamName} vs ${previewAwayTeamName}` : data.title}</h3>
-              <p className="mt-1 text-xs font-bold uppercase tracking-[0.12em] text-white/55">
-                Simple summary first. Tap view details only if needed.
-              </p>
+        <section className="glass-pane overflow-hidden rounded-[2rem] border border-amber-400/20 shadow-xl">
+          <div className="flex flex-col md:flex-row md:items-center">
+            <div className="flex flex-1 items-center gap-6 p-6">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-500/10 text-amber-500 shadow-inner">
+                 <History size={24} />
+              </div>
+              <div className="flex-1">
+                <p className="text-[10px] font-black uppercase tracking-[0.4em] text-amber-400/60">Flashback Insight</p>
+                <h3 className="text-xl font-black text-white">{data.title}</h3>
+              </div>
+              
+              <div className="hidden items-center gap-8 md:flex">
+                 <div className="text-center">
+                    <p className="text-[8px] font-bold uppercase tracking-widest text-white/30 mb-1">Result</p>
+                    <p className="text-lg font-black tabular-nums text-white">{teamA.score} - {teamB.score}</p>
+                 </div>
+                 <div className="h-8 w-px bg-white/10" />
+                 <div className="text-center">
+                    <p className="text-[8px] font-bold uppercase tracking-widest text-white/30 mb-1">Teams</p>
+                    <p className="text-xs font-bold text-white/80">{teamA.name} v {teamB.name}</p>
+                 </div>
+              </div>
             </div>
 
             <button
               onClick={() => setShowRecordDetails((prev) => !prev)}
-              className="inline-flex items-center gap-2 rounded-xl border border-white/15 bg-black/35 px-4 py-2 text-xs font-bold uppercase tracking-[0.14em] text-white/80 hover:border-emerald-400/35 hover:text-emerald-300"
+              className="flex items-center justify-center gap-3 bg-white/5 px-8 py-6 text-xs font-black uppercase tracking-widest text-white transition-all hover:bg-emerald-500 hover:text-black md:h-full md:py-0"
             >
-              {showRecordDetails ? <EyeOff size={14} /> : <Eye size={14} />}
-              {showRecordDetails ? "Hide Details" : "View Details"}
+              {showRecordDetails ? <EyeOff size={16} /> : <Eye size={16} />}
+              {showRecordDetails ? "Minimize" : "Deep Analysis"}
             </button>
-          </div>
-
-          <div className="mt-4 grid gap-3 md:grid-cols-3">
-            <div className="rounded-xl border border-white/10 bg-black/25 px-4 py-3">
-              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/45">Fixture</p>
-              <p className="mt-1 text-sm font-black text-white">{teamA.name} vs {teamB.name}</p>
-            </div>
-            <div className="rounded-xl border border-white/10 bg-black/25 px-4 py-3">
-              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/45">Result</p>
-              <p className="mt-1 text-sm font-black text-amber-300">{teamA.score} - {teamB.score}</p>
-            </div>
-            <div className="rounded-xl border border-white/10 bg-black/25 px-4 py-3">
-              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/45">Timeline Entries</p>
-              <p className="mt-1 text-sm font-black text-white">{timelineFeed.length}</p>
-            </div>
           </div>
         </section>
       ) : null}
@@ -676,7 +685,12 @@ export default function LiveMatchBoard() {
               {data.playersPerSide} VS {data.playersPerSide} MODEL
             </span>
           </div>
-          <TacticalCanvas teamA={teamA} teamB={teamB} playersPerSide={data.playersPerSide} />
+          <TacticalCanvas 
+            teamA={teamA} 
+            teamB={teamB} 
+            playersPerSide={data.playersPerSide} 
+            variant="premium"
+          />
         </div>
 
         <div className="glass-pane flex flex-col rounded-[2rem] p-6 lg:p-8">

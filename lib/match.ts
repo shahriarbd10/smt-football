@@ -30,6 +30,7 @@ export type Player = {
   redCards: number;
   assists: number;
   position?: { x: number; y: number };
+  imageUrl?: string;
 };
 
 export type Team = {

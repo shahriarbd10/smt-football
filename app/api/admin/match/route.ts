@@ -23,6 +23,7 @@ import {
   upsertUpcomingEvent,
   updatePlayerStat,
   setSpecialEvent,
+  setPlayerImageUrl,
 } from "@/lib/match-service";
 import type { EventType, TeamKey } from "@/lib/match";
 
@@ -259,6 +260,12 @@ export async function PATCH(request: Request) {
             }
           | undefined,
       });
+      return Response.json(result);
+    }
+
+    if (action === "setPlayerImageUrl") {
+      const { teamKey, playerName, imageUrl } = body as any;
+      const result = await setPlayerImageUrl(teamKey, playerName, imageUrl);
       return Response.json(result);
     }
 

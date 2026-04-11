@@ -36,6 +36,7 @@ type Player = {
   goals: number;
   assists: number;
   position?: { x: number; y: number };
+  imageUrl?: string;
 };
 
 type Team = {
@@ -481,16 +482,21 @@ export default function AdminPanel() {
     }
 
     try {
-      await patchMatch({
-        action: "setLineup",
-        teamKey: team.key,
-        starters,
-        goalkeeper,
-      });
+      await patchMatch({ action: "setLineup", teamKey: team.key, starters, goalkeeper });
       setMessage(`${team.name} lineup confirmed.`);
       await mutate();
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Lineup save error.");
+      setMessage(err instanceof Error ? err.message : "lineup save error.");
+    }
+  }
+
+  async function updatePlayerImageUrl(teamKey: "A" | "B", playerName: string, imageUrl: string) {
+    try {
+      await patchMatch({ action: "setPlayerImageUrl", teamKey, playerName, imageUrl });
+      setMessage(`Image updated for ${playerName}.`);
+      await mutate();
+    } catch (err) {
+      setMessage("Failed to update player image.");
     }
   }
 
@@ -2178,6 +2184,21 @@ export default function AdminPanel() {
                                </div>
                              </div>
                           </div>
+                        </div>
+
+                        <div className="flex flex-col gap-2">
+                           <span className="text-[7px] font-black text-white/20 uppercase tracking-widest px-1">Img URL</span>
+                           <input
+                            defaultValue={player.imageUrl || ""}
+                            onBlur={(e) => {
+                              const value = e.target.value.trim();
+                              if (value !== (player.imageUrl || "")) {
+                                updatePlayerImageUrl(team.key, player.name, value);
+                              }
+                            }}
+                            placeholder="https://..."
+                            className="w-32 rounded-lg border border-white/10 bg-black/40 px-2 py-1 text-[10px] text-white outline-none focus:border-emerald-500/40"
+                          />
                         </div>
                         
                         <div className="flex gap-2">

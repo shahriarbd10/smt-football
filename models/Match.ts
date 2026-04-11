@@ -14,6 +14,7 @@ const PlayerSchema = new Schema(
       x: { type: Number },
       y: { type: Number },
     },
+    imageUrl: { type: String },
   },
   { _id: false },
 );

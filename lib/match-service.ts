@@ -1301,6 +1301,33 @@ export async function updatePlayerStat(
   return match.toObject();
 }
 
+export async function setPlayerImageUrl(
+  teamKey: TeamKey,
+  playerName: string,
+  imageUrl: string,
+) {
+  await connectToDatabase();
+  const match = await MatchModel.findOne({ slug: MATCH_SLUG });
+
+  if (!match) {
+    throw new Error("Match data not found.");
+  }
+
+  const team = match.teams.find((t: any) => t.key === teamKey);
+  const player = team?.players.find((p: any) => p.name === playerName);
+
+  if (!team || !player) {
+    throw new Error("Team or player not found.");
+  }
+
+  player.imageUrl = imageUrl;
+
+  syncLatestHistoryLineupFromLive(match);
+
+  await match.save();
+  return match.toObject();
+}
+
 export async function upsertMember(member: { id?: string; name: string }) {
   await connectToDatabase();
   const match = await MatchModel.findOne({ slug: MATCH_SLUG });

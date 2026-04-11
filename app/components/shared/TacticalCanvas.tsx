@@ -9,6 +9,7 @@ interface Player {
   goals: number;
   assists: number;
   position?: { x: number; y: number };
+  imageUrl?: string;
 }
 
 interface Team {
@@ -23,9 +24,17 @@ interface TacticalCanvasProps {
   playersPerSide?: 6 | 7;
   isEditable?: boolean;
   onPlayerPositionChange?: (teamKey: "A" | "B", playerName: string, x: number, y: number) => void;
+  variant?: "standard" | "premium";
 }
 
-export function TacticalCanvas({ teamA, teamB, playersPerSide = 6, isEditable, onPlayerPositionChange }: TacticalCanvasProps) {
+export function TacticalCanvas({ 
+  teamA, 
+  teamB, 
+  playersPerSide = 6, 
+  isEditable, 
+  onPlayerPositionChange,
+  variant = "standard" 
+}: TacticalCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   const getDefaultPositions = (count: 6 | 7, side: "left" | "right") => {
@@ -205,14 +214,43 @@ export function TacticalCanvas({ teamA, teamB, playersPerSide = 6, isEditable, o
             }`}
           >
             <div
-              className="flex h-11 w-11 items-center justify-center rounded-full border-2 border-white/50 text-[10px] font-bold shadow-2xl transition-transform"
+              className={`relative flex h-14 w-14 items-center justify-center rounded-full border-2 transition-all ${
+                variant === "premium" ? "h-16 w-16" : ""
+              }`}
               style={{
-                backgroundColor: color,
-                color: "#fff",
-                boxShadow: `0 0 20px ${color}88`,
+                backgroundColor: variant === "standard" ? color : "rgba(0,0,0,0.6)",
+                borderColor: variant === "standard" ? "rgba(255,255,255,0.5)" : color,
+                boxShadow: variant === "standard" 
+                  ? `0 0 20px ${color}88` 
+                  : `0 0 30px ${color}66, inset 0 0 15px ${color}44`,
               }}
             >
-              {player.name.substring(0, 2).toUpperCase()}
+              {variant === "premium" && (
+                <motion.div
+                  animate={{
+                    opacity: [0.3, 0.6, 0.3],
+                    scale: [1, 1.05, 1],
+                  }}
+                  transition={{
+                    duration: 3,
+                    repeat: Infinity,
+                  }}
+                  className="absolute inset-0 rounded-full"
+                  style={{ border: `2px solid ${color}` }}
+                />
+              )}
+
+              {player.imageUrl ? (
+                <img 
+                  src={player.imageUrl} 
+                  alt={player.name} 
+                  className="h-full w-full rounded-full object-cover"
+                />
+              ) : (
+                <span className="text-sm font-black text-white">
+                  {player.name.substring(0, 2).toUpperCase()}
+                </span>
+              )}
             </div>
             <div className="whitespace-nowrap rounded-md bg-black/80 px-2 py-0.5 text-[9px] font-bold text-white backdrop-blur-md ring-1 ring-white/10 select-none">
               {player.name}
