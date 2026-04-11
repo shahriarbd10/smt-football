@@ -3,6 +3,23 @@ export type EventType = "goal" | "assist" | "foul" | "yellow" | "red";
 export type PaymentStatus = "paid" | "unpaid" | "pending";
 export type MatchLifecycle = "scheduled" | "live" | "ended";
 
+export type SpecialEvent = {
+  enabled: boolean;
+  title: string;
+  subtitle: string;
+  eventDate: string;
+  homeTeamName: string;
+  awayTeamName: string;
+  badgeText: string;
+  venue: string;
+  squad: {
+    gk: string[];
+    cb: string[];
+    cmf: string[];
+    cf: string[];
+  };
+};
+
 export type Player = {
   name: string;
   isStarter: boolean;
@@ -63,6 +80,7 @@ export type MatchData = {
   slug: string;
   title: string;
   matchLifecycle: MatchLifecycle;
+  specialEvent: SpecialEvent;
   playersPerSide: 6 | 7;
   slotMinutes: number;
   elapsedMinutes: number;
@@ -129,6 +147,22 @@ export const defaultMatch: Omit<MatchData, "updatedAt"> = {
   slug: "smt-futsal-session",
   title: "SMT Football Tournament Night",
   matchLifecycle: "scheduled",
+  specialEvent: {
+    enabled: true,
+    title: "Special Event Match",
+    subtitle: "SMT Gamma vs FSD",
+    eventDate: "2026-04-15T18:00:00+06:00",
+    homeTeamName: "SMT Gamma",
+    awayTeamName: "FSD",
+    badgeText: "Mainstream Feature Clash",
+    venue: "SM Technology Ground",
+    squad: {
+      gk: ["Nayeem", "Omar"],
+      cb: ["Rakib", "Fahim", "Hasib", "Polas"],
+      cmf: ["Shahriar", "Mynul", "Sanim"],
+      cf: ["Jamil", "Imtiaz", "Israk"],
+    },
+  },
   playersPerSide: 6,
   slotMinutes: 90,
   elapsedMinutes: 0,

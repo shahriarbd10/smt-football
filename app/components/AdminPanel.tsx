@@ -86,6 +86,22 @@ type UpcomingEvent = {
 type MatchData = {
   title: string;
   matchLifecycle: "scheduled" | "live" | "ended";
+  specialEvent: {
+    enabled: boolean;
+    title: string;
+    subtitle: string;
+    eventDate: string;
+    homeTeamName: string;
+    awayTeamName: string;
+    badgeText: string;
+    venue: string;
+    squad: {
+      gk: string[];
+      cb: string[];
+      cmf: string[];
+      cf: string[];
+    };
+  };
   playersPerSide: 6 | 7;
   elapsedMinutes: number;
   slotMinutes: number;
@@ -158,6 +174,20 @@ export default function AdminPanel() {
   const [selectedCalendarDate, setSelectedCalendarDate] = useState(
     new Date().toISOString().slice(0, 10),
   );
+  const [specialEventDraft, setSpecialEventDraft] = useState({
+    enabled: true,
+    title: "Special Event Match",
+    subtitle: "SMT Gamma vs FSD",
+    eventDate: "",
+    homeTeamName: "SMT Gamma",
+    awayTeamName: "FSD",
+    badgeText: "Mainstream Feature Clash",
+    venue: "SM Technology Ground",
+    gk: "Nayeem, Omar",
+    cb: "Rakib, Fahim, Hasib, Polas",
+    cmf: "Shahriar, Mynul, Sanim",
+    cf: "Jamil, Imtiaz, Israk",
+  });
   const upcomingDateInputRef = useRef<HTMLInputElement>(null);
 
   const unauthorized = error?.message === "UNAUTHORIZED";
@@ -266,6 +296,32 @@ export default function AdminPanel() {
       .slice(0, 16);
     setKickoffDraft(localValue);
   }, [data?.kickoffTime]);
+
+  useEffect(() => {
+    if (!data?.specialEvent) return;
+
+    const specialDate = new Date(data.specialEvent.eventDate);
+    const localDateValue = Number.isNaN(specialDate.getTime())
+      ? ""
+      : new Date(specialDate.getTime() - new Date().getTimezoneOffset() * 60000)
+          .toISOString()
+          .slice(0, 16);
+
+    setSpecialEventDraft({
+      enabled: Boolean(data.specialEvent.enabled),
+      title: data.specialEvent.title || "Special Event Match",
+      subtitle: data.specialEvent.subtitle || "SMT Gamma vs FSD",
+      eventDate: localDateValue,
+      homeTeamName: data.specialEvent.homeTeamName || "SMT Gamma",
+      awayTeamName: data.specialEvent.awayTeamName || "FSD",
+      badgeText: data.specialEvent.badgeText || "Mainstream Feature Clash",
+      venue: data.specialEvent.venue || "SM Technology Ground",
+      gk: (data.specialEvent.squad?.gk || []).join(", "),
+      cb: (data.specialEvent.squad?.cb || []).join(", "),
+      cmf: (data.specialEvent.squad?.cmf || []).join(", "),
+      cf: (data.specialEvent.squad?.cf || []).join(", "),
+    });
+  }, [data?.specialEvent]);
 
   const eventLogMatchOptions = useMemo(() => {
     const upcoming = [...(data?.upcomingEvents || [])].sort(
@@ -720,6 +776,42 @@ export default function AdminPanel() {
     }
   }
 
+  async function saveSpecialEventConfig() {
+    const toList = (raw: string) =>
+      raw
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean);
+
+    const eventDateIso = specialEventDraft.eventDate
+      ? new Date(specialEventDraft.eventDate).toISOString()
+      : undefined;
+
+    try {
+      const updated = await patchMatch({
+        action: "setSpecialEvent",
+        enabled: specialEventDraft.enabled,
+        title: specialEventDraft.title,
+        subtitle: specialEventDraft.subtitle,
+        eventDate: eventDateIso,
+        homeTeamName: specialEventDraft.homeTeamName,
+        awayTeamName: specialEventDraft.awayTeamName,
+        badgeText: specialEventDraft.badgeText,
+        venue: specialEventDraft.venue,
+        squad: {
+          gk: toList(specialEventDraft.gk),
+          cb: toList(specialEventDraft.cb),
+          cmf: toList(specialEventDraft.cmf),
+          cf: toList(specialEventDraft.cf),
+        },
+      });
+      mutate(updated, false);
+      setMessage("Special event configuration updated.");
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Could not save special event config.");
+    }
+  }
+
   async function setMemberAttendanceStatus(
     eventId: string,
     memberId: string,
@@ -910,6 +1002,102 @@ export default function AdminPanel() {
                     Auto starts when kickoff time matches current country time window
                   </p>
                 </div>
+              </section>
+
+              <section className="glass-pane rounded-[2rem] p-8 md:col-span-2" aria-labelledby="special-event-title">
+                <h2 id="special-event-title" className="mb-6 flex items-center gap-3 text-xl font-bold text-white uppercase">
+                  <Zap className="text-emerald-500" size={20} aria-hidden="true" />
+                  Special Event Banner Control
+                </h2>
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  <label className="col-span-2 flex items-center gap-2 rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-xs font-bold text-white/80">
+                    <input
+                      type="checkbox"
+                      checked={specialEventDraft.enabled}
+                      onChange={(e) => setSpecialEventDraft((prev) => ({ ...prev, enabled: e.target.checked }))}
+                    />
+                    Enable special event banner on homepage
+                  </label>
+
+                  <input
+                    value={specialEventDraft.title}
+                    onChange={(e) => setSpecialEventDraft((prev) => ({ ...prev, title: e.target.value }))}
+                    placeholder="Banner title"
+                    className="rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm font-bold text-white outline-none focus:border-emerald-500/40"
+                  />
+                  <input
+                    value={specialEventDraft.subtitle}
+                    onChange={(e) => setSpecialEventDraft((prev) => ({ ...prev, subtitle: e.target.value }))}
+                    placeholder="Match headline"
+                    className="rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm font-bold text-white outline-none focus:border-emerald-500/40"
+                  />
+
+                  <input
+                    type="datetime-local"
+                    value={specialEventDraft.eventDate}
+                    onChange={(e) => setSpecialEventDraft((prev) => ({ ...prev, eventDate: e.target.value }))}
+                    className="rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm font-bold text-white outline-none focus:border-emerald-500/40"
+                  />
+                  <input
+                    value={specialEventDraft.badgeText}
+                    onChange={(e) => setSpecialEventDraft((prev) => ({ ...prev, badgeText: e.target.value }))}
+                    placeholder="Badge text"
+                    className="rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm font-bold text-white outline-none focus:border-emerald-500/40"
+                  />
+
+                  <input
+                    value={specialEventDraft.homeTeamName}
+                    onChange={(e) => setSpecialEventDraft((prev) => ({ ...prev, homeTeamName: e.target.value }))}
+                    placeholder="Home team"
+                    className="rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm font-bold text-white outline-none focus:border-emerald-500/40"
+                  />
+                  <input
+                    value={specialEventDraft.awayTeamName}
+                    onChange={(e) => setSpecialEventDraft((prev) => ({ ...prev, awayTeamName: e.target.value }))}
+                    placeholder="Away team"
+                    className="rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm font-bold text-white outline-none focus:border-emerald-500/40"
+                  />
+
+                  <input
+                    value={specialEventDraft.venue}
+                    onChange={(e) => setSpecialEventDraft((prev) => ({ ...prev, venue: e.target.value }))}
+                    placeholder="Venue"
+                    className="col-span-2 rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm font-bold text-white outline-none focus:border-emerald-500/40"
+                  />
+
+                  <input
+                    value={specialEventDraft.gk}
+                    onChange={(e) => setSpecialEventDraft((prev) => ({ ...prev, gk: e.target.value }))}
+                    placeholder="GK list, comma separated"
+                    className="rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm font-bold text-white outline-none focus:border-emerald-500/40"
+                  />
+                  <input
+                    value={specialEventDraft.cb}
+                    onChange={(e) => setSpecialEventDraft((prev) => ({ ...prev, cb: e.target.value }))}
+                    placeholder="CB list, comma separated"
+                    className="rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm font-bold text-white outline-none focus:border-emerald-500/40"
+                  />
+                  <input
+                    value={specialEventDraft.cmf}
+                    onChange={(e) => setSpecialEventDraft((prev) => ({ ...prev, cmf: e.target.value }))}
+                    placeholder="CMF list, comma separated"
+                    className="rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm font-bold text-white outline-none focus:border-emerald-500/40"
+                  />
+                  <input
+                    value={specialEventDraft.cf}
+                    onChange={(e) => setSpecialEventDraft((prev) => ({ ...prev, cf: e.target.value }))}
+                    placeholder="CF list, comma separated"
+                    className="rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm font-bold text-white outline-none focus:border-emerald-500/40"
+                  />
+                </div>
+
+                <button
+                  onClick={saveSpecialEventConfig}
+                  className="mt-5 rounded-xl bg-emerald-500 px-4 py-2 text-xs font-bold uppercase tracking-[0.16em] text-black"
+                >
+                  Save Special Event
+                </button>
               </section>
 
               <section className="glass-pane rounded-[2rem] p-8" aria-labelledby="live-scores-title">

@@ -311,11 +311,43 @@ export async function getLatestMatchForPublic() {
     return { ...defaultMatch, isLiveContext: false, currentMatchId: "live", currentMatchTitle: defaultMatch.title } as any;
   }
 
+  const normalizedSpecialEvent = {
+    ...defaultMatch.specialEvent,
+    ...(match as any).specialEvent,
+    squad: {
+      ...defaultMatch.specialEvent.squad,
+      ...((match as any).specialEvent?.squad || {}),
+    },
+  };
+
   if (isCurrentlyLive(match)) {
     return {
       ...match,
+      specialEvent: normalizedSpecialEvent,
       events: (match.events || []).filter((event: any) => String(event.matchId || "live") === "live"),
       isLiveContext: true,
+      currentMatchId: "live",
+      currentMatchTitle: match.title,
+    };
+  }
+
+  const lifecycle = String(match.matchLifecycle || "scheduled") as MatchLifecycle;
+  const kickoff = new Date(match.kickoffTime || Date.now());
+  const hasUpcomingKickoff = !Number.isNaN(kickoff.getTime()) && kickoff.getTime() > Date.now();
+
+  const specialDate = new Date(normalizedSpecialEvent.eventDate || "");
+  const hasUpcomingSpecialEvent =
+    Boolean(normalizedSpecialEvent.enabled) &&
+    !Number.isNaN(specialDate.getTime()) &&
+    specialDate.getTime() > Date.now();
+
+  // Always prioritize current setup when special event is enabled, or when next session is upcoming.
+  if (normalizedSpecialEvent.enabled || lifecycle === "scheduled" || hasUpcomingKickoff || hasUpcomingSpecialEvent) {
+    return {
+      ...match,
+      specialEvent: normalizedSpecialEvent,
+      events: (match.events || []).filter((event: any) => String(event.matchId || "live") === "live"),
+      isLiveContext: false,
       currentMatchId: "live",
       currentMatchTitle: match.title,
     };
@@ -328,6 +360,7 @@ export async function getLatestMatchForPublic() {
   if (!latestRecord) {
     return {
       ...match,
+      specialEvent: normalizedSpecialEvent,
       events: (match.events || []).filter((event: any) => String(event.matchId || "live") === "live"),
       isLiveContext: false,
       currentMatchId: "live",
@@ -337,6 +370,7 @@ export async function getLatestMatchForPublic() {
 
   return {
     ...match,
+    specialEvent: normalizedSpecialEvent,
     title: latestRecord.title,
     playersPerSide: latestRecord.playersPerSide,
     slotMinutes: latestRecord.slotMinutes,
@@ -441,6 +475,11 @@ export async function getOrCreateMatch() {
       match = await MatchModel.findOne({ slug: MATCH_SLUG }).lean();
     }
 
+    if (!match.specialEvent || typeof match.specialEvent !== "object") {
+      await MatchModel.updateOne({ slug: MATCH_SLUG }, { $set: { specialEvent: defaultMatch.specialEvent } });
+      match = await MatchModel.findOne({ slug: MATCH_SLUG }).lean();
+    }
+
     const nonLiveEvents = (match.events || []).filter(
       (event: any) => String(event.matchId || "live") !== "live",
     );
@@ -472,6 +511,78 @@ export async function getOrCreateMatch() {
   }
 
   return match;
+}
+
+export async function setSpecialEvent(input: {
+  enabled?: boolean;
+  title?: string;
+  subtitle?: string;
+  eventDate?: string;
+  homeTeamName?: string;
+  awayTeamName?: string;
+  badgeText?: string;
+  venue?: string;
+  squad?: {
+    gk?: string[];
+    cb?: string[];
+    cmf?: string[];
+    cf?: string[];
+  };
+}) {
+  await connectToDatabase();
+  const match = await MatchModel.findOne({ slug: MATCH_SLUG });
+
+  if (!match) {
+    throw new Error("Match data not found.");
+  }
+
+  const existing = (match as any).specialEvent || defaultMatch.specialEvent;
+  const next = {
+    ...existing,
+    ...input,
+    squad: {
+      ...(existing?.squad || defaultMatch.specialEvent.squad),
+      ...(input.squad || {}),
+    },
+  };
+
+  const normalizedDate = new Date(next.eventDate || defaultMatch.specialEvent.eventDate);
+  if (Number.isNaN(normalizedDate.getTime())) {
+    throw new Error("Invalid special event date.");
+  }
+
+  const normalizeList = (items?: string[]) =>
+    Array.from(
+      new Set(
+        (items || [])
+          .map((name) => String(name).trim())
+          .filter(Boolean),
+      ),
+    );
+
+  match.set("specialEvent", {
+    enabled: Boolean(next.enabled),
+    title: String(next.title || defaultMatch.specialEvent.title).trim() || defaultMatch.specialEvent.title,
+    subtitle: String(next.subtitle || defaultMatch.specialEvent.subtitle).trim() || defaultMatch.specialEvent.subtitle,
+    eventDate: normalizedDate,
+    homeTeamName:
+      String(next.homeTeamName || defaultMatch.specialEvent.homeTeamName).trim() ||
+      defaultMatch.specialEvent.homeTeamName,
+    awayTeamName:
+      String(next.awayTeamName || defaultMatch.specialEvent.awayTeamName).trim() ||
+      defaultMatch.specialEvent.awayTeamName,
+    badgeText: String(next.badgeText || defaultMatch.specialEvent.badgeText).trim() || defaultMatch.specialEvent.badgeText,
+    venue: String(next.venue || defaultMatch.specialEvent.venue).trim() || defaultMatch.specialEvent.venue,
+    squad: {
+      gk: normalizeList(next.squad?.gk),
+      cb: normalizeList(next.squad?.cb),
+      cmf: normalizeList(next.squad?.cmf),
+      cf: normalizeList(next.squad?.cf),
+    },
+  });
+
+  await match.save();
+  return match.toObject();
 }
 
 export async function setLineup(

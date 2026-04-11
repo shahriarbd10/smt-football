@@ -45,6 +45,22 @@ type MatchData = {
   isLiveContext?: boolean;
   currentMatchId?: string;
   currentMatchTitle?: string;
+  specialEvent?: {
+    enabled: boolean;
+    title: string;
+    subtitle: string;
+    eventDate: string;
+    homeTeamName: string;
+    awayTeamName: string;
+    badgeText: string;
+    venue: string;
+    squad: {
+      gk: string[];
+      cb: string[];
+      cmf: string[];
+      cf: string[];
+    };
+  };
   playersPerSide: 6 | 7;
   slotMinutes: number;
   elapsedMinutes: number;
@@ -235,13 +251,99 @@ export default function LiveMatchBoard() {
 
   const timelineFeed = [...timelineEvents].reverse();
   const isLiveContext = Boolean(data.isLiveContext);
+  const specialEvent = data.specialEvent;
+  const showSpecialEvent = Boolean(specialEvent?.enabled);
+
+  const specialEventDate = specialEvent?.eventDate ? new Date(specialEvent.eventDate) : null;
+  const hasSpecialDate = Boolean(specialEventDate && !Number.isNaN(specialEventDate.getTime()));
+  const specialDateText = hasSpecialDate
+    ? specialEventDate!.toLocaleString("en-BD", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : "Date TBA";
 
   // Countdown Logic
-  const kickoffDate = data.kickoffTime ? new Date(data.kickoffTime) : null;
+  const kickoffDate = showSpecialEvent && hasSpecialDate
+    ? specialEventDate
+    : data.kickoffTime
+      ? new Date(data.kickoffTime)
+      : null;
   const isPreMatch = data.elapsedMinutes === 0 && kickoffDate && new Date() < kickoffDate;
+  const previewHomeTeamName = showSpecialEvent && specialEvent?.homeTeamName ? specialEvent.homeTeamName : teamA.name;
+  const previewAwayTeamName = showSpecialEvent && specialEvent?.awayTeamName ? specialEvent.awayTeamName : teamB.name;
 
   return (
     <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-6 px-4 py-8 md:py-12">
+      {showSpecialEvent && specialEvent ? (
+        <motion.section
+          initial={{ opacity: 0, y: 24 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6 }}
+          className="relative overflow-hidden rounded-[2.2rem] border border-emerald-400/30 bg-[radial-gradient(circle_at_top_left,rgba(16,185,129,0.22),transparent_48%),radial-gradient(circle_at_bottom_right,rgba(245,158,11,0.18),transparent_52%),linear-gradient(120deg,rgba(2,20,23,0.95),rgba(4,39,45,0.92))] p-6 shadow-[0_0_40px_rgba(16,185,129,0.2)] md:p-8"
+        >
+          <div className="pointer-events-none absolute -left-20 -top-20 h-64 w-64 rounded-full bg-emerald-400/20 blur-[90px]" />
+          <div className="pointer-events-none absolute -bottom-16 -right-12 h-56 w-56 rounded-full bg-amber-300/20 blur-[80px]" />
+
+          <div className="relative z-10 grid gap-6 lg:grid-cols-[1.35fr_1fr]">
+            <div>
+              <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-emerald-300/30 bg-black/30 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-200">
+                <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+                {specialEvent.badgeText || "Special Event"}
+              </div>
+
+              <h2 className="text-3xl font-black tracking-tight text-white md:text-5xl">
+                {specialEvent.title}
+              </h2>
+
+              <p className="mt-2 text-xl font-bold text-emerald-200 md:text-2xl">{specialEvent.subtitle}</p>
+
+              <div className="mt-5 flex flex-wrap items-center gap-3 text-xs font-bold uppercase tracking-[0.14em] text-white/80">
+                <span className="rounded-full border border-white/15 bg-black/40 px-3 py-1">{specialDateText}</span>
+                <span className="rounded-full border border-white/15 bg-black/40 px-3 py-1">{specialEvent.venue}</span>
+              </div>
+
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.2 }}
+                className="mt-6 rounded-2xl border border-white/10 bg-black/30 p-4"
+              >
+                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/50">Mainstream Matchup</p>
+                <div className="mt-2 flex items-center gap-3 text-lg font-black text-white md:text-2xl">
+                  <span className="text-emerald-300">{specialEvent.homeTeamName}</span>
+                  <span className="text-white/30">vs</span>
+                  <span className="text-amber-300">{specialEvent.awayTeamName}</span>
+                </div>
+              </motion.div>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
+              {[
+                { label: "GK", value: specialEvent.squad?.gk || [] },
+                { label: "CB", value: specialEvent.squad?.cb || [] },
+                { label: "CMF", value: specialEvent.squad?.cmf || [] },
+                { label: "CF", value: specialEvent.squad?.cf || [] },
+              ].map((line, idx) => (
+                <motion.div
+                  key={line.label}
+                  initial={{ opacity: 0, x: 24 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.15 + idx * 0.07 }}
+                  className="rounded-xl border border-white/10 bg-black/35 p-3"
+                >
+                  <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-emerald-300">{line.label}</p>
+                  <p className="mt-1 text-sm font-bold text-white">{line.value.length ? line.value.join(", ") : "TBD"}</p>
+                </motion.div>
+              ))}
+            </div>
+          </div>
+        </motion.section>
+      ) : null}
+
       <AnimatePresence mode="wait">
         {isPreMatch && kickoffDate ? (
           <motion.div
@@ -265,7 +367,7 @@ export default function LiveMatchBoard() {
                   <span className="text-[10px] font-bold tracking-[0.5em] text-emerald-400 uppercase">Incoming Session</span>
                 </div>
                 <h1 className="text-6xl font-black text-white md:text-8xl tracking-tighter">
-                  {data.title}
+                  {showSpecialEvent && specialEvent?.subtitle ? specialEvent.subtitle : data.title}
                 </h1>
               </motion.div>
 
@@ -274,14 +376,14 @@ export default function LiveMatchBoard() {
                    <div className="h-20 w-20 overflow-hidden rounded-2xl border border-white/10 bg-black/20 p-2">
                      <img src="/images/team_a.png" alt="" className="h-full w-full object-contain" />
                    </div>
-                   <span className="mt-2 text-sm font-bold text-white/60">{teamA.name}</span>
+                   <span className="mt-2 text-sm font-bold text-white/60">{previewHomeTeamName}</span>
                 </div>
                 <div className="text-2xl font-black text-white/20 italic">VS</div>
                 <div className="flex flex-col items-center">
                    <div className="h-20 w-20 overflow-hidden rounded-2xl border border-white/10 bg-black/20 p-2">
                      <img src="/images/team_b.png" alt="" className="h-full w-full object-contain" />
                    </div>
-                   <span className="mt-2 text-sm font-bold text-white/60">{teamB.name}</span>
+                   <span className="mt-2 text-sm font-bold text-white/60">{previewAwayTeamName}</span>
                 </div>
               </div>
 

@@ -99,11 +99,32 @@ const MatchRecordSchema = new Schema(
   { _id: false },
 );
 
+const SpecialEventSchema = new Schema(
+  {
+    enabled: { type: Boolean, default: true },
+    title: { type: String, default: "Special Event Match" },
+    subtitle: { type: String, default: "SMT Gamma vs FSD" },
+    eventDate: { type: Date, default: () => new Date("2026-04-15T18:00:00+06:00") },
+    homeTeamName: { type: String, default: "SMT Gamma" },
+    awayTeamName: { type: String, default: "FSD" },
+    badgeText: { type: String, default: "Mainstream Feature Clash" },
+    venue: { type: String, default: "SM Technology Ground" },
+    squad: {
+      gk: { type: [String], default: ["Nayeem", "Omar"] },
+      cb: { type: [String], default: ["Rakib", "Fahim", "Hasib", "Polas"] },
+      cmf: { type: [String], default: ["Shahriar", "Mynul", "Sanim"] },
+      cf: { type: [String], default: ["Jamil", "Imtiaz", "Israk"] },
+    },
+  },
+  { _id: false },
+);
+
 const MatchSchema = new Schema(
   {
     slug: { type: String, required: true, unique: true },
     title: { type: String, required: true },
     matchLifecycle: { type: String, enum: ["scheduled", "live", "ended"], default: "scheduled" },
+    specialEvent: { type: SpecialEventSchema, default: () => ({}) },
     playersPerSide: { type: Number, enum: [6, 7], default: 6 },
     slotMinutes: { type: Number, required: true, default: 90 },
     elapsedMinutes: { type: Number, required: true, default: 0 },

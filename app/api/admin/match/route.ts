@@ -22,6 +22,7 @@ import {
   upsertMember,
   upsertUpcomingEvent,
   updatePlayerStat,
+  setSpecialEvent,
 } from "@/lib/match-service";
 import type { EventType, TeamKey } from "@/lib/match";
 
@@ -235,6 +236,28 @@ export async function PATCH(request: Request) {
         confirmed: body.confirmed as boolean | undefined,
         paymentStatus: body.paymentStatus as "paid" | "unpaid" | "pending" | undefined,
         paidAmount: Number(body.paidAmount ?? NaN),
+      });
+      return Response.json(result);
+    }
+
+    if (action === "setSpecialEvent") {
+      const result = await setSpecialEvent({
+        enabled: body.enabled as boolean | undefined,
+        title: body.title as string | undefined,
+        subtitle: body.subtitle as string | undefined,
+        eventDate: body.eventDate as string | undefined,
+        homeTeamName: body.homeTeamName as string | undefined,
+        awayTeamName: body.awayTeamName as string | undefined,
+        badgeText: body.badgeText as string | undefined,
+        venue: body.venue as string | undefined,
+        squad: body.squad as
+          | {
+              gk?: string[];
+              cb?: string[];
+              cmf?: string[];
+              cf?: string[];
+            }
+          | undefined,
       });
       return Response.json(result);
     }
