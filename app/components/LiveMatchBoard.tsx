@@ -12,7 +12,10 @@ import {
   History,
   TrendingUp,
   ShieldAlert,
-  Camera
+  Camera,
+  Eye,
+  EyeOff,
+  Sparkles
 } from "lucide-react";
 import { MatchStatCard } from "./shared/MatchStatCard";
 import { TacticalCanvas } from "./shared/TacticalCanvas";
@@ -181,6 +184,7 @@ export default function LiveMatchBoard() {
   const { data, error } = useSWR("/api/match", fetcher, {
     refreshInterval: 2500,
   });
+  const [showRecordDetails, setShowRecordDetails] = useState(false);
 
   if (error) {
     return (
@@ -210,6 +214,10 @@ export default function LiveMatchBoard() {
   }
 
   const [teamA, teamB] = data.teams;
+  const safeNumber = (value: unknown) => {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : 0;
+  };
   const progress = Math.min((data.elapsedMinutes / data.slotMinutes) * 100, 100);
   const playerPool = data.teams.flatMap((team) =>
     team.players.map((player) => ({
@@ -221,13 +229,13 @@ export default function LiveMatchBoard() {
   const getLeaders = (
     valueSelector: (player: (typeof playerPool)[number]) => number,
   ) => {
-    const highest = Math.max(0, ...playerPool.map(valueSelector));
+    const highest = Math.max(0, ...playerPool.map((player) => safeNumber(valueSelector(player))));
     if (highest <= 0) {
       return { names: "No leader yet", value: 0 };
     }
 
     const names = playerPool
-      .filter((player) => valueSelector(player) === highest)
+      .filter((player) => safeNumber(valueSelector(player)) === highest)
       .map((player) => `${player.name} (${player.teamKey})`)
       .join(", ");
 
@@ -251,11 +259,17 @@ export default function LiveMatchBoard() {
 
   const timelineFeed = [...timelineEvents].reverse();
   const isLiveContext = Boolean(data.isLiveContext);
+  const isHistoryContext = !isLiveContext && String(data.currentMatchId || "live") !== "live";
   const specialEvent = data.specialEvent;
   const showSpecialEvent = Boolean(specialEvent?.enabled);
 
   const specialEventDate = specialEvent?.eventDate ? new Date(specialEvent.eventDate) : null;
   const hasSpecialDate = Boolean(specialEventDate && !Number.isNaN(specialEventDate.getTime()));
+  const isUpcomingSpecialContext =
+    showSpecialEvent &&
+    hasSpecialDate &&
+    Boolean(specialEventDate && specialEventDate.getTime() > Date.now()) &&
+    !isLiveContext;
   const specialDateText = hasSpecialDate
     ? specialEventDate!.toLocaleString("en-BD", {
         day: "2-digit",
@@ -275,6 +289,7 @@ export default function LiveMatchBoard() {
   const isPreMatch = data.elapsedMinutes === 0 && kickoffDate && new Date() < kickoffDate;
   const previewHomeTeamName = showSpecialEvent && specialEvent?.homeTeamName ? specialEvent.homeTeamName : teamA.name;
   const previewAwayTeamName = showSpecialEvent && specialEvent?.awayTeamName ? specialEvent.awayTeamName : teamB.name;
+  const showExpandedMatchSections = (!isHistoryContext && !isUpcomingSpecialContext) || showRecordDetails;
 
   return (
     <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-6 px-4 py-8 md:py-12">
@@ -319,6 +334,54 @@ export default function LiveMatchBoard() {
                   <span className="text-amber-300">{specialEvent.awayTeamName}</span>
                 </div>
               </motion.div>
+
+              <div className="mt-5 rounded-2xl border border-white/10 bg-black/30 p-4">
+                <div className="mb-3 flex items-center gap-2">
+                  <Sparkles size={16} className="text-emerald-300" />
+                  <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/55">Match Vibe</p>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  {[
+                    {
+                      title: "Team Identity",
+                      subtitle: "SMT Gamma energy",
+                      image: "/images/team_a.png",
+                      glow: "from-emerald-500/35 to-cyan-400/10",
+                    },
+                    {
+                      title: "Big Rivalry",
+                      subtitle: "Gamma vs FSD",
+                      image: "/images/team_b.png",
+                      glow: "from-amber-500/35 to-red-400/10",
+                    },
+                    {
+                      title: "Fan Moment",
+                      subtitle: "Built for the crowd",
+                      image: "/images/team_a.png",
+                      glow: "from-sky-500/30 to-indigo-500/10",
+                    },
+                  ].map((item, idx) => (
+                    <motion.div
+                      key={item.title}
+                      initial={{ opacity: 0, y: 18 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.25 + idx * 0.08 }}
+                      className={`relative overflow-hidden rounded-xl border border-white/10 bg-gradient-to-br ${item.glow} p-3`}
+                    >
+                      <div className="absolute -right-4 -top-4 h-14 w-14 rounded-full bg-white/20 blur-xl" />
+                      <div className="relative z-10 flex items-center gap-3">
+                        <div className="h-12 w-12 overflow-hidden rounded-lg border border-white/15 bg-black/20 p-1.5">
+                          <img src={item.image} alt={item.title} className="h-full w-full object-contain" />
+                        </div>
+                        <div>
+                          <p className="text-xs font-black text-white">{item.title}</p>
+                          <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-white/60">{item.subtitle}</p>
+                        </div>
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+              </div>
             </div>
 
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
@@ -451,6 +514,46 @@ export default function LiveMatchBoard() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {isHistoryContext || isUpcomingSpecialContext ? (
+        <section className="glass-pane rounded-[2rem] border border-amber-400/25 p-5 md:p-6">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-300">Last Match Snapshot</p>
+              <h3 className="mt-1 text-2xl font-black text-white">{isUpcomingSpecialContext ? `${previewHomeTeamName} vs ${previewAwayTeamName}` : data.title}</h3>
+              <p className="mt-1 text-xs font-bold uppercase tracking-[0.12em] text-white/55">
+                Simple summary first. Tap view details only if needed.
+              </p>
+            </div>
+
+            <button
+              onClick={() => setShowRecordDetails((prev) => !prev)}
+              className="inline-flex items-center gap-2 rounded-xl border border-white/15 bg-black/35 px-4 py-2 text-xs font-bold uppercase tracking-[0.14em] text-white/80 hover:border-emerald-400/35 hover:text-emerald-300"
+            >
+              {showRecordDetails ? <EyeOff size={14} /> : <Eye size={14} />}
+              {showRecordDetails ? "Hide Details" : "View Details"}
+            </button>
+          </div>
+
+          <div className="mt-4 grid gap-3 md:grid-cols-3">
+            <div className="rounded-xl border border-white/10 bg-black/25 px-4 py-3">
+              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/45">Fixture</p>
+              <p className="mt-1 text-sm font-black text-white">{teamA.name} vs {teamB.name}</p>
+            </div>
+            <div className="rounded-xl border border-white/10 bg-black/25 px-4 py-3">
+              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/45">Result</p>
+              <p className="mt-1 text-sm font-black text-amber-300">{teamA.score} - {teamB.score}</p>
+            </div>
+            <div className="rounded-xl border border-white/10 bg-black/25 px-4 py-3">
+              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/45">Timeline Entries</p>
+              <p className="mt-1 text-sm font-black text-white">{timelineFeed.length}</p>
+            </div>
+          </div>
+        </section>
+      ) : null}
+
+      {showExpandedMatchSections ? (
+      <>
 
       {/* Main Scoreboard Grid */}
       <section className="grid gap-6 lg:grid-cols-[1fr_auto_1fr]">
@@ -660,6 +763,8 @@ export default function LiveMatchBoard() {
           matchTitle={data.currentMatchTitle || data.title}
         />
       </section>
+      </>
+      ) : null}
     </main>
   );
 }
