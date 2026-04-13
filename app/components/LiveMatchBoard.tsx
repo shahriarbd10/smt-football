@@ -15,8 +15,10 @@ import {
   Camera,
   Eye,
   EyeOff,
-  Sparkles,
-  Calendar
+  Calendar,
+  Shield,
+  Flag,
+  LayoutGrid
 } from "lucide-react";
 import { MatchStatCard } from "./shared/MatchStatCard";
 import { TacticalCanvas } from "./shared/TacticalCanvas";
@@ -319,7 +321,7 @@ export default function LiveMatchBoard() {
                 transition={{ delay: 0.2 }}
                 className="mb-8 inline-flex w-fit items-center gap-2 rounded-full border border-emerald-400/30 bg-emerald-400/10 px-4 py-1.5 text-[10px] font-black uppercase tracking-[0.2em] text-emerald-300"
               >
-                <Sparkles size={14} className="animate-pulse" />
+                <Shield size={14} />
                 {specialEvent.badgeText || "Mainstream Feature Match"}
               </motion.div>
 
@@ -343,7 +345,7 @@ export default function LiveMatchBoard() {
                 {specialEvent.subtitle}
               </motion.p>
 
-              <div className="mt-10 flex flex-wrap items-center gap-4">
+                <div className="mt-10 grid gap-4 sm:grid-cols-2">
                 <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur-md">
                    <div className="h-10 w-10 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400">
                       <Calendar size={20} />
@@ -356,27 +358,29 @@ export default function LiveMatchBoard() {
 
                 <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur-md">
                    <div className="h-10 w-10 rounded-full bg-amber-500/20 flex items-center justify-center text-amber-400">
-                      <Target size={20} />
+                      <Flag size={20} />
                    </div>
                    <div>
                       <p className="text-[10px] font-bold uppercase tracking-widest text-white/30">Venue</p>
                       <p className="text-sm font-black text-white">{specialEvent.venue}</p>
                    </div>
                 </div>
+              </div>
 
-                  <div className="mt-5 rounded-2xl border border-white/10 bg-black/30 p-4">
-                    <div className="mb-3 flex items-center justify-between">
-                      <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/55">
-                        SMT Gamma Formation Ground
-                      </p>
-                      <span className="rounded-full border border-white/15 bg-black/40 px-2 py-1 text-[9px] font-bold uppercase tracking-[0.14em] text-white/70">
-                        Player graphics enabled
-                      </span>
-                    </div>
-                    <SpecialMatchFormationPitch
-                      players={Array.isArray(specialEvent.formationPlayers) ? specialEvent.formationPlayers : []}
-                    />
-                  </div>
+              <div className="mt-5 rounded-2xl border border-white/10 bg-black/30 p-4 md:p-5">
+                <div className="mb-3 flex items-center justify-between">
+                  <p className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-white/60">
+                    <LayoutGrid size={12} className="text-emerald-300" />
+                    SMT Gamma Formation Ground
+                  </p>
+                  <span className="rounded-full border border-white/15 bg-black/40 px-2 py-1 text-[9px] font-bold uppercase tracking-[0.14em] text-white/75">
+                    Player Graphics Enabled
+                  </span>
+                </div>
+                <SpecialMatchFormationPitch
+                  players={Array.isArray(specialEvent.formationPlayers) ? specialEvent.formationPlayers : []}
+                  className="min-h-[320px] md:min-h-[390px]"
+                />
               </div>
 
               {isUpcomingSpecialContext && (
@@ -422,7 +426,7 @@ export default function LiveMatchBoard() {
                             <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">Visual Identity</p>
                             <p className="text-xl font-black text-emerald-400">SMT GAMMA VS FSD</p>
                           </div>
-                          <Sparkles size={24} className="text-amber-400" />
+                          <Shield size={24} className="text-amber-400" />
                        </div>
                     </motion.div>
                   </div>

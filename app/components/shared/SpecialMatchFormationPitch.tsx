@@ -16,6 +16,7 @@ type SpecialMatchFormationPitchProps = {
   players: SpecialFormationPlayer[];
   editable?: boolean;
   onPlayerMove?: (id: string, x: number, y: number) => void;
+  className?: string;
 };
 
 const roleChipStyle: Record<SpecialFormationPlayer["role"], string> = {
@@ -25,7 +26,7 @@ const roleChipStyle: Record<SpecialFormationPlayer["role"], string> = {
   CF: "bg-amber-500/30 text-amber-200 border-amber-300/30",
 };
 
-export function SpecialMatchFormationPitch({ players, editable, onPlayerMove }: SpecialMatchFormationPitchProps) {
+export function SpecialMatchFormationPitch({ players, editable, onPlayerMove, className }: SpecialMatchFormationPitchProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   const clampPosition = (x: number, y: number, role: SpecialFormationPlayer["role"]) => {
@@ -41,7 +42,7 @@ export function SpecialMatchFormationPitch({ players, editable, onPlayerMove }: 
   return (
     <div
       ref={containerRef}
-      className="relative aspect-[16/10] w-full overflow-hidden rounded-[2rem] border border-white/10 bg-[radial-gradient(circle_at_top_left,rgba(16,185,129,0.35),transparent_45%),radial-gradient(circle_at_bottom_right,rgba(2,132,199,0.2),transparent_40%),linear-gradient(145deg,rgba(1,36,31,0.95),rgba(2,64,53,0.9))]"
+      className={`relative aspect-[16/10] min-h-[280px] w-full overflow-hidden rounded-[2rem] border border-white/15 bg-[radial-gradient(circle_at_top_left,rgba(16,185,129,0.35),transparent_45%),radial-gradient(circle_at_bottom_right,rgba(2,132,199,0.2),transparent_40%),linear-gradient(145deg,rgba(1,36,31,0.95),rgba(2,64,53,0.9))] md:min-h-[360px] ${className || ""}`}
     >
       <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(255,255,255,0.06)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.06)_1px,transparent_1px)] bg-[size:56px_56px] opacity-20" />
       <div className="absolute left-1/2 top-0 h-full w-px -translate-x-1/2 bg-white/20" />
@@ -70,9 +71,9 @@ export function SpecialMatchFormationPitch({ players, editable, onPlayerMove }: 
               const next = clampPosition(rawX, rawY, player.role);
               onPlayerMove(player.id, next.x, next.y);
             }}
-            className={`group flex max-w-[96px] flex-col items-center gap-1 ${editable ? "cursor-grab" : ""}`}
+            className={`group flex w-[92px] flex-col items-center gap-1 ${editable ? "cursor-grab" : ""}`}
           >
-            <div className="relative h-12 w-12 overflow-hidden rounded-full border-2 border-white/40 bg-black/35 shadow-[0_0_20px_rgba(16,185,129,0.35)]">
+            <div className="relative h-11 w-11 overflow-hidden rounded-full border-2 border-white/45 bg-black/35 shadow-[0_0_16px_rgba(16,185,129,0.35)] md:h-12 md:w-12">
               {player.imageUrl ? (
                 <img src={player.imageUrl} alt={player.name} className="h-full w-full object-cover" />
               ) : (
@@ -84,7 +85,7 @@ export function SpecialMatchFormationPitch({ players, editable, onPlayerMove }: 
             <span className={`rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] ${roleChipStyle[player.role]}`}>
               {player.role}
             </span>
-            <span className="rounded-md bg-black/75 px-2 py-0.5 text-[9px] font-bold text-white">
+            <span className="rounded-md bg-black/80 px-2 py-0.5 text-[9px] font-bold text-white ring-1 ring-white/10">
               {player.name}
             </span>
           </motion.div>

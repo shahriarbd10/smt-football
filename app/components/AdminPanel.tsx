@@ -1141,6 +1141,7 @@ export default function AdminPanel() {
                     players={specialFormationPlayers}
                     editable
                     onPlayerMove={updateSpecialPlayerPosition}
+                    className="min-h-[340px] md:min-h-[420px]"
                   />
 
                   <div className="grid gap-2 md:grid-cols-2">
