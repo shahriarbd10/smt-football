@@ -336,6 +336,15 @@ export default function LiveMatchBoard() {
                 ))}
               </motion.h2>
 
+              <motion.div
+                className="mt-4 inline-flex w-fit items-center gap-2 rounded-full border border-white/15 bg-black/35 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-white/70"
+                animate={{ y: [0, -4, 0] }}
+                transition={{ repeat: Infinity, duration: 2.4, ease: "easeInOut" }}
+              >
+                <Target size={12} className="text-emerald-300" />
+                Matchday Motion Active
+              </motion.div>
+
               <motion.p 
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}

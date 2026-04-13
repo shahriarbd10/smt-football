@@ -9,6 +9,7 @@ export type SpecialFormationPlayer = {
   id: string;
   name: string;
   role: SpecialFormationRole;
+  designation: string;
   x: number;
   y: number;
   imageUrl?: string;
@@ -192,6 +193,13 @@ export function buildSpecialFormationPlayers(squad: {
   cmf: string[];
   cf: string[];
 }): SpecialFormationPlayer[] {
+  const roleDesignation: Record<SpecialFormationRole, string> = {
+    GK: "Goalkeeper",
+    CB: "Center Back",
+    CMF: "Central Midfielder",
+    CF: "Center Forward",
+  };
+
   const toPlayers = (role: SpecialFormationRole, names: string[]) =>
     names.map((name, index) => {
       const [x, y] = roleAnchors[role][index] || roleAnchors[role][roleAnchors[role].length - 1];
@@ -199,6 +207,7 @@ export function buildSpecialFormationPlayers(squad: {
         id: `${role.toLowerCase()}-${index + 1}-${name.toLowerCase().replace(/\s+/g, "-")}`,
         name,
         role,
+        designation: roleDesignation[role],
         x,
         y,
         imageUrl: "",

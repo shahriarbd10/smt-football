@@ -1,12 +1,14 @@
 "use client";
 
-import { useRef } from "react";
+import { useMemo, useRef, useState } from "react";
 import { motion, PanInfo } from "framer-motion";
+import { Circle, Image as ImageIcon, Shield, User } from "lucide-react";
 
 export type SpecialFormationPlayer = {
   id: string;
   name: string;
   role: "GK" | "CB" | "CMF" | "CF";
+  designation?: string;
   x: number;
   y: number;
   imageUrl?: string;
@@ -28,6 +30,14 @@ const roleChipStyle: Record<SpecialFormationPlayer["role"], string> = {
 
 export function SpecialMatchFormationPitch({ players, editable, onPlayerMove, className }: SpecialMatchFormationPitchProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  const activePlayerId = hoveredId || selectedId;
+  const activePlayer = useMemo(
+    () => players.find((player) => player.id === activePlayerId) || null,
+    [players, activePlayerId],
+  );
 
   const clampPosition = (x: number, y: number, role: SpecialFormationPlayer["role"]) => {
     const minX = role === "GK" ? 5 : 12;
@@ -49,12 +59,21 @@ export function SpecialMatchFormationPitch({ players, editable, onPlayerMove, cl
       <div className="absolute left-1/2 top-1/2 h-28 w-28 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/25" />
       <div className="absolute left-0 top-1/4 h-1/2 w-[13%] rounded-r-3xl border border-l-0 border-white/20" />
       <div className="absolute right-0 top-1/4 h-1/2 w-[13%] rounded-l-3xl border border-r-0 border-white/20" />
+      <motion.div
+        className="pointer-events-none absolute left-1/2 top-1/2 text-white/25"
+        animate={{ scale: [1, 1.12, 1], rotate: [0, 8, 0] }}
+        transition={{ repeat: Infinity, duration: 3.2, ease: "easeInOut" }}
+      >
+        <Circle size={20} />
+      </motion.div>
 
       {players.map((player) => (
         <div
           key={player.id}
           className="absolute -translate-x-1/2 -translate-y-1/2"
           style={{ left: `${player.x}%`, top: `${player.y}%`, zIndex: 10 }}
+          onMouseEnter={() => setHoveredId(player.id)}
+          onMouseLeave={() => setHoveredId((current) => (current === player.id ? null : current))}
         >
           <motion.div
             drag={Boolean(editable)}
@@ -62,6 +81,7 @@ export function SpecialMatchFormationPitch({ players, editable, onPlayerMove, cl
             dragConstraints={containerRef}
             whileHover={{ scale: 1.05 }}
             whileDrag={{ scale: 1.08, zIndex: 30 }}
+            onClick={() => setSelectedId((current) => (current === player.id ? null : player.id))}
             onDragEnd={(_event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
               if (!editable || !onPlayerMove || !containerRef.current) return;
 
@@ -91,6 +111,36 @@ export function SpecialMatchFormationPitch({ players, editable, onPlayerMove, cl
           </motion.div>
         </div>
       ))}
+
+      {activePlayer ? (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="absolute bottom-3 left-3 z-40 w-[230px] rounded-xl border border-white/20 bg-black/70 p-3 backdrop-blur-md"
+        >
+          <div className="flex items-center gap-3">
+            <div className="h-11 w-11 overflow-hidden rounded-lg border border-white/25 bg-black/40">
+              {activePlayer.imageUrl ? (
+                <img src={activePlayer.imageUrl} alt={activePlayer.name} className="h-full w-full object-cover" />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center text-white/70">
+                  <ImageIcon size={16} />
+                </div>
+              )}
+            </div>
+            <div>
+              <p className="inline-flex items-center gap-1 text-xs font-black text-white">
+                <User size={12} className="text-emerald-300" />
+                {activePlayer.name}
+              </p>
+              <p className="mt-0.5 inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-[0.12em] text-white/65">
+                <Shield size={11} className="text-amber-300" />
+                {activePlayer.designation || activePlayer.role}
+              </p>
+            </div>
+          </div>
+        </motion.div>
+      ) : null}
     </div>
   );
 }

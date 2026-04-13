@@ -328,7 +328,10 @@ export default function AdminPanel() {
 
     setSpecialFormationPlayers(
       Array.isArray(data.specialEvent.formationPlayers)
-        ? data.specialEvent.formationPlayers
+        ? data.specialEvent.formationPlayers.map((player) => ({
+            ...player,
+            designation: player.designation || player.role,
+          }))
         : [],
     );
   }, [data?.specialEvent]);
@@ -847,6 +850,18 @@ export default function AdminPanel() {
     );
   }
 
+  function updateSpecialPlayerName(id: string, name: string) {
+    setSpecialFormationPlayers((prev) =>
+      prev.map((player) => (player.id === id ? { ...player, name } : player)),
+    );
+  }
+
+  function updateSpecialPlayerDesignation(id: string, designation: string) {
+    setSpecialFormationPlayers((prev) =>
+      prev.map((player) => (player.id === id ? { ...player, designation } : player)),
+    );
+  }
+
   function updateSpecialPlayerPosition(id: string, x: number, y: number) {
     setSpecialFormationPlayers((prev) =>
       prev.map((player) => (player.id === id ? { ...player, x, y } : player)),
@@ -1147,9 +1162,19 @@ export default function AdminPanel() {
                   <div className="grid gap-2 md:grid-cols-2">
                     {specialFormationPlayers.map((player) => (
                       <div key={player.id} className="rounded-xl border border-white/10 bg-black/30 p-3">
-                        <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-white/65">
-                          {player.name} ({player.role})
-                        </p>
+                        <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-white/65">{player.role}</p>
+                        <input
+                          value={player.name}
+                          onChange={(e) => updateSpecialPlayerName(player.id, e.target.value)}
+                          placeholder="Player name"
+                          className="mt-2 w-full rounded-lg border border-white/10 bg-black/40 px-2 py-1.5 text-xs font-bold text-white outline-none focus:border-emerald-500/40"
+                        />
+                        <input
+                          value={player.designation || ""}
+                          onChange={(e) => updateSpecialPlayerDesignation(player.id, e.target.value)}
+                          placeholder="Designation"
+                          className="mt-2 w-full rounded-lg border border-white/10 bg-black/40 px-2 py-1.5 text-xs font-bold text-white outline-none focus:border-emerald-500/40"
+                        />
                         <input
                           value={player.imageUrl || ""}
                           onChange={(e) => updateSpecialPlayerImage(player.id, e.target.value)}
