@@ -605,10 +605,8 @@ export async function setSpecialEvent(input: {
         role: ["GK", "CB", "CMF", "CF"].includes(String(player.role))
           ? (player.role as "GK" | "CB" | "CMF" | "CF")
           : "CMF",
-        officeDesignation:
-          String(player.officeDesignation || player.designation || "").trim() || String(player.role || "CMF"),
-        designation:
-          String(player.designation || player.officeDesignation || "").trim() || String(player.role || "CMF"),
+        officeDesignation: String(player.officeDesignation || player.designation || "").trim(),
+        designation: String(player.designation || player.officeDesignation || "").trim(),
         x: Math.max(4, Math.min(96, Number(player.x || 50))),
         y: Math.max(6, Math.min(94, Number(player.y || 50))),
         imageUrl: String(player.imageUrl || "").trim(),

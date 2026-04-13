@@ -135,8 +135,12 @@ export function SpecialMatchFormationPitch({ players, editable, onPlayerMove, cl
                 {activePlayer.name}
               </p>
               <p className="mt-0.5 inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-[0.12em] text-white/65">
+                <Shield size={11} className="text-cyan-300" />
+                Position: {activePlayer.role}
+              </p>
+              <p className="mt-0.5 inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-[0.12em] text-white/65">
                 <Shield size={11} className="text-amber-300" />
-                Office: {activePlayer.officeDesignation || activePlayer.designation || activePlayer.role}
+                Office: {activePlayer.officeDesignation || activePlayer.designation || "Not set"}
               </p>
             </div>
           </div>

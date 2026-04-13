@@ -333,8 +333,8 @@ export default function AdminPanel() {
       Array.isArray(data.specialEvent.formationPlayers)
         ? data.specialEvent.formationPlayers.map((player) => ({
             ...player,
-            officeDesignation: player.officeDesignation || player.designation || player.role,
-            designation: player.designation || player.officeDesignation || player.role,
+            officeDesignation: player.officeDesignation || player.designation || "",
+            designation: player.designation || player.officeDesignation || "",
           }))
         : [],
     );
@@ -899,7 +899,7 @@ export default function AdminPanel() {
       formData.append("api_key", signData.apiKey);
       formData.append("timestamp", signData.timestamp);
       formData.append("folder", signData.folder);
-      formData.append("public_id", `player-${playerId}-${Date.now()}`);
+      formData.append("public_id", signData.publicId);
       formData.append("signature", signData.signature);
       formData.append("transformation", signData.transformation);
 
