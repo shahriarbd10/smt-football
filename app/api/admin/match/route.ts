@@ -264,6 +264,7 @@ export async function PATCH(request: Request) {
               id: string;
               name: string;
               role: "GK" | "CB" | "CMF" | "CF";
+              officeDesignation?: string;
               designation?: string;
               x: number;
               y: number;

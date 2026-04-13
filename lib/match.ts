@@ -9,6 +9,7 @@ export type SpecialFormationPlayer = {
   id: string;
   name: string;
   role: SpecialFormationRole;
+  officeDesignation?: string;
   designation: string;
   x: number;
   y: number;
@@ -207,6 +208,7 @@ export function buildSpecialFormationPlayers(squad: {
         id: `${role.toLowerCase()}-${index + 1}-${name.toLowerCase().replace(/\s+/g, "-")}`,
         name,
         role,
+        officeDesignation: roleDesignation[role],
         designation: roleDesignation[role],
         x,
         y,

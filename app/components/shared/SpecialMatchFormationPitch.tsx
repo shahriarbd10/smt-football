@@ -8,6 +8,7 @@ export type SpecialFormationPlayer = {
   id: string;
   name: string;
   role: "GK" | "CB" | "CMF" | "CF";
+  officeDesignation?: string;
   designation?: string;
   x: number;
   y: number;
@@ -135,7 +136,7 @@ export function SpecialMatchFormationPitch({ players, editable, onPlayerMove, cl
               </p>
               <p className="mt-0.5 inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-[0.12em] text-white/65">
                 <Shield size={11} className="text-amber-300" />
-                {activePlayer.designation || activePlayer.role}
+                Office: {activePlayer.officeDesignation || activePlayer.designation || activePlayer.role}
               </p>
             </div>
           </div>

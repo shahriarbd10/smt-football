@@ -24,7 +24,9 @@ import {
   CalendarDays,
   MousePointer2,
   Trash2,
-  UserPlus
+  UserPlus,
+  Upload,
+  Loader2
 } from "lucide-react";
 import { TacticalCanvas } from "./shared/TacticalCanvas";
 import { SpecialMatchFormationPitch, type SpecialFormationPlayer } from "./shared/SpecialMatchFormationPitch";
@@ -192,6 +194,7 @@ export default function AdminPanel() {
     cf: "Jamil, Imtiaz, Israk",
   });
   const [specialFormationPlayers, setSpecialFormationPlayers] = useState<SpecialFormationPlayer[]>([]);
+  const [uploadingSpecialPlayerId, setUploadingSpecialPlayerId] = useState<string | null>(null);
   const upcomingDateInputRef = useRef<HTMLInputElement>(null);
 
   const unauthorized = error?.message === "UNAUTHORIZED";
@@ -330,7 +333,8 @@ export default function AdminPanel() {
       Array.isArray(data.specialEvent.formationPlayers)
         ? data.specialEvent.formationPlayers.map((player) => ({
             ...player,
-            designation: player.designation || player.role,
+            officeDesignation: player.officeDesignation || player.designation || player.role,
+            designation: player.designation || player.officeDesignation || player.role,
           }))
         : [],
     );
@@ -858,7 +862,9 @@ export default function AdminPanel() {
 
   function updateSpecialPlayerDesignation(id: string, designation: string) {
     setSpecialFormationPlayers((prev) =>
-      prev.map((player) => (player.id === id ? { ...player, designation } : player)),
+      prev.map((player) =>
+        player.id === id ? { ...player, officeDesignation: designation, designation } : player,
+      ),
     );
   }
 
@@ -866,6 +872,53 @@ export default function AdminPanel() {
     setSpecialFormationPlayers((prev) =>
       prev.map((player) => (player.id === id ? { ...player, x, y } : player)),
     );
+  }
+
+  async function uploadSpecialPlayerImage(playerId: string, file?: File | null) {
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) {
+      setMessage("Image too large. Max 10MB.");
+      return;
+    }
+
+    try {
+      setUploadingSpecialPlayerId(playerId);
+
+      const signRes = await fetch("/api/uploads/sign", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ folder: "smt-tournament/players" }),
+      });
+      const signData = await signRes.json();
+      if (!signRes.ok) {
+        throw new Error(signData?.message || "Failed to sign upload.");
+      }
+
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("api_key", signData.apiKey);
+      formData.append("timestamp", signData.timestamp);
+      formData.append("folder", signData.folder);
+      formData.append("public_id", `player-${playerId}-${Date.now()}`);
+      formData.append("signature", signData.signature);
+      formData.append("transformation", signData.transformation);
+
+      const uploadRes = await fetch(
+        `https://api.cloudinary.com/v1_1/${signData.cloudName}/image/upload`,
+        { method: "POST", body: formData },
+      );
+      const uploadData = await uploadRes.json();
+      if (!uploadRes.ok) {
+        throw new Error(uploadData?.error?.message || "Upload failed.");
+      }
+
+      updateSpecialPlayerImage(playerId, uploadData.secure_url);
+      setMessage("Player image uploaded. Save special event to publish.");
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Could not upload player image.");
+    } finally {
+      setUploadingSpecialPlayerId(null);
+    }
   }
 
   if (unauthorized) {
@@ -1172,15 +1225,34 @@ export default function AdminPanel() {
                         <input
                           value={player.designation || ""}
                           onChange={(e) => updateSpecialPlayerDesignation(player.id, e.target.value)}
-                          placeholder="Designation"
+                          placeholder="Office designation"
                           className="mt-2 w-full rounded-lg border border-white/10 bg-black/40 px-2 py-1.5 text-xs font-bold text-white outline-none focus:border-emerald-500/40"
                         />
-                        <input
-                          value={player.imageUrl || ""}
-                          onChange={(e) => updateSpecialPlayerImage(player.id, e.target.value)}
-                          placeholder="Player image URL"
-                          className="mt-2 w-full rounded-lg border border-white/10 bg-black/40 px-2 py-1.5 text-xs font-bold text-white outline-none focus:border-emerald-500/40"
-                        />
+
+                        <div className="mt-2 flex items-center gap-2">
+                          <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-white/10 bg-black/40 px-2 py-1.5 text-[11px] font-bold text-white hover:border-emerald-500/40">
+                            {uploadingSpecialPlayerId === player.id ? (
+                              <Loader2 size={13} className="animate-spin text-emerald-300" />
+                            ) : (
+                              <Upload size={13} className="text-emerald-300" />
+                            )}
+                            Upload Photo
+                            <input
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              onChange={(e) => uploadSpecialPlayerImage(player.id, e.target.files?.[0])}
+                              disabled={uploadingSpecialPlayerId === player.id}
+                            />
+                          </label>
+                          {player.imageUrl ? (
+                            <img
+                              src={player.imageUrl}
+                              alt={player.name}
+                              className="h-8 w-8 rounded-md border border-white/20 object-cover"
+                            />
+                          ) : null}
+                        </div>
                       </div>
                     ))}
                   </div>
