@@ -912,8 +912,42 @@ export default function AdminPanel() {
         throw new Error(uploadData?.error?.message || "Upload failed.");
       }
 
-      updateSpecialPlayerImage(playerId, uploadData.secure_url);
-      setMessage("Player image uploaded. Save special event to publish.");
+      const nextFormationPlayers = specialFormationPlayers.map((player) =>
+        player.id === playerId ? { ...player, imageUrl: uploadData.secure_url } : player,
+      );
+
+      const toList = (raw: string) =>
+        raw
+          .split(",")
+          .map((item) => item.trim())
+          .filter(Boolean);
+
+      const eventDateIso = specialEventDraft.eventDate
+        ? new Date(specialEventDraft.eventDate).toISOString()
+        : undefined;
+
+      const updated = await patchMatch({
+        action: "setSpecialEvent",
+        enabled: specialEventDraft.enabled,
+        title: specialEventDraft.title,
+        subtitle: specialEventDraft.subtitle,
+        eventDate: eventDateIso,
+        homeTeamName: specialEventDraft.homeTeamName,
+        awayTeamName: specialEventDraft.awayTeamName,
+        badgeText: specialEventDraft.badgeText,
+        venue: specialEventDraft.venue,
+        squad: {
+          gk: toList(specialEventDraft.gk),
+          cb: toList(specialEventDraft.cb),
+          cmf: toList(specialEventDraft.cmf),
+          cf: toList(specialEventDraft.cf),
+        },
+        formationPlayers: nextFormationPlayers,
+      });
+
+      setSpecialFormationPlayers(nextFormationPlayers);
+      mutate(updated, false);
+      setMessage("Player image uploaded and saved to Cloudinary + match data.");
     } catch (err) {
       setMessage(err instanceof Error ? err.message : "Could not upload player image.");
     } finally {

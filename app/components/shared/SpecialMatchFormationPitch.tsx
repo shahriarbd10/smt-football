@@ -92,9 +92,9 @@ export function SpecialMatchFormationPitch({ players, editable, onPlayerMove, cl
               const next = clampPosition(rawX, rawY, player.role);
               onPlayerMove(player.id, next.x, next.y);
             }}
-            className={`group flex w-[92px] flex-col items-center gap-1 ${editable ? "cursor-grab" : ""}`}
+            className={`group flex w-[108px] flex-col items-center ${editable ? "cursor-grab" : ""}`}
           >
-            <div className="relative h-11 w-11 overflow-hidden rounded-full border-2 border-white/45 bg-black/35 shadow-[0_0_16px_rgba(16,185,129,0.35)] md:h-12 md:w-12">
+            <div className="relative h-10 w-10 overflow-hidden rounded-full border-2 border-white/45 bg-black/35 shadow-[0_0_14px_rgba(16,185,129,0.3)] md:h-11 md:w-11">
               {player.imageUrl ? (
                 <img src={player.imageUrl} alt={player.name} className="h-full w-full object-cover" />
               ) : (
@@ -102,11 +102,13 @@ export function SpecialMatchFormationPitch({ players, editable, onPlayerMove, cl
                   {player.name.slice(0, 2).toUpperCase()}
                 </div>
               )}
+              <span
+                className={`absolute -bottom-2 left-1/2 -translate-x-1/2 rounded-full border px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-[0.08em] ${roleChipStyle[player.role]}`}
+              >
+                {player.role}
+              </span>
             </div>
-            <span className={`rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] ${roleChipStyle[player.role]}`}>
-              {player.role}
-            </span>
-            <span className="rounded-md bg-black/80 px-2 py-0.5 text-[9px] font-bold text-white ring-1 ring-white/10">
+            <span className="mt-3 max-w-[96px] truncate rounded-md bg-black/85 px-2.5 py-1 text-center text-[9px] font-bold text-white ring-1 ring-white/15">
               {player.name}
             </span>
           </motion.div>
