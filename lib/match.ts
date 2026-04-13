@@ -3,6 +3,17 @@ export type EventType = "goal" | "assist" | "foul" | "yellow" | "red";
 export type PaymentStatus = "paid" | "unpaid" | "pending";
 export type MatchLifecycle = "scheduled" | "live" | "ended";
 
+export type SpecialFormationRole = "GK" | "CB" | "CMF" | "CF";
+
+export type SpecialFormationPlayer = {
+  id: string;
+  name: string;
+  role: SpecialFormationRole;
+  x: number;
+  y: number;
+  imageUrl?: string;
+};
+
 export type SpecialEvent = {
   enabled: boolean;
   title: string;
@@ -18,6 +29,7 @@ export type SpecialEvent = {
     cmf: string[];
     cf: string[];
   };
+  formationPlayers: SpecialFormationPlayer[];
 };
 
 export type Player = {
@@ -144,6 +156,63 @@ const initialMembers: Member[] = [
   name,
 }));
 
+const defaultSpecialSquad = {
+  gk: ["Nayeem", "Omar"],
+  cb: ["Rakib", "Fahim", "Hasib", "Polas"],
+  cmf: ["Shahriar", "Mynul", "Sanim"],
+  cf: ["Jamil", "Imtiaz", "Israk"],
+};
+
+const roleAnchors: Record<SpecialFormationRole, Array<[number, number]>> = {
+  GK: [
+    [9, 50],
+    [14, 50],
+  ],
+  CB: [
+    [24, 20],
+    [24, 40],
+    [24, 60],
+    [24, 80],
+  ],
+  CMF: [
+    [48, 28],
+    [48, 50],
+    [48, 72],
+  ],
+  CF: [
+    [72, 32],
+    [72, 50],
+    [72, 68],
+  ],
+};
+
+export function buildSpecialFormationPlayers(squad: {
+  gk: string[];
+  cb: string[];
+  cmf: string[];
+  cf: string[];
+}): SpecialFormationPlayer[] {
+  const toPlayers = (role: SpecialFormationRole, names: string[]) =>
+    names.map((name, index) => {
+      const [x, y] = roleAnchors[role][index] || roleAnchors[role][roleAnchors[role].length - 1];
+      return {
+        id: `${role.toLowerCase()}-${index + 1}-${name.toLowerCase().replace(/\s+/g, "-")}`,
+        name,
+        role,
+        x,
+        y,
+        imageUrl: "",
+      };
+    });
+
+  return [
+    ...toPlayers("GK", squad.gk),
+    ...toPlayers("CB", squad.cb),
+    ...toPlayers("CMF", squad.cmf),
+    ...toPlayers("CF", squad.cf),
+  ];
+}
+
 export const defaultMatch: Omit<MatchData, "updatedAt"> = {
   slug: "smt-futsal-session",
   title: "SMT Football Tournament Night",
@@ -157,12 +226,8 @@ export const defaultMatch: Omit<MatchData, "updatedAt"> = {
     awayTeamName: "FSD",
     badgeText: "Mainstream Feature Clash",
     venue: "SM Technology Ground",
-    squad: {
-      gk: ["Nayeem", "Omar"],
-      cb: ["Rakib", "Fahim", "Hasib", "Polas"],
-      cmf: ["Shahriar", "Mynul", "Sanim"],
-      cf: ["Jamil", "Imtiaz", "Israk"],
-    },
+    squad: defaultSpecialSquad,
+    formationPlayers: buildSpecialFormationPlayers(defaultSpecialSquad),
   },
   playersPerSide: 6,
   slotMinutes: 90,

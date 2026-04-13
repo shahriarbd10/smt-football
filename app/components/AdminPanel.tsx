@@ -27,6 +27,7 @@ import {
   UserPlus
 } from "lucide-react";
 import { TacticalCanvas } from "./shared/TacticalCanvas";
+import { SpecialMatchFormationPitch, type SpecialFormationPlayer } from "./shared/SpecialMatchFormationPitch";
 import PhotoGallery from "./PhotoGallery";
 
 type Player = {
@@ -102,6 +103,7 @@ type MatchData = {
       cmf: string[];
       cf: string[];
     };
+    formationPlayers: SpecialFormationPlayer[];
   };
   playersPerSide: 6 | 7;
   elapsedMinutes: number;
@@ -189,6 +191,7 @@ export default function AdminPanel() {
     cmf: "Shahriar, Mynul, Sanim",
     cf: "Jamil, Imtiaz, Israk",
   });
+  const [specialFormationPlayers, setSpecialFormationPlayers] = useState<SpecialFormationPlayer[]>([]);
   const upcomingDateInputRef = useRef<HTMLInputElement>(null);
 
   const unauthorized = error?.message === "UNAUTHORIZED";
@@ -322,6 +325,12 @@ export default function AdminPanel() {
       cmf: (data.specialEvent.squad?.cmf || []).join(", "),
       cf: (data.specialEvent.squad?.cf || []).join(", "),
     });
+
+    setSpecialFormationPlayers(
+      Array.isArray(data.specialEvent.formationPlayers)
+        ? data.specialEvent.formationPlayers
+        : [],
+    );
   }, [data?.specialEvent]);
 
   const eventLogMatchOptions = useMemo(() => {
@@ -810,6 +819,7 @@ export default function AdminPanel() {
           cmf: toList(specialEventDraft.cmf),
           cf: toList(specialEventDraft.cf),
         },
+        formationPlayers: specialFormationPlayers,
       });
       mutate(updated, false);
       setMessage("Special event configuration updated.");
@@ -829,6 +839,18 @@ export default function AdminPanel() {
     } catch (err) {
       setMessage(err instanceof Error ? err.message : "Could not update member status.");
     }
+  }
+
+  function updateSpecialPlayerImage(id: string, imageUrl: string) {
+    setSpecialFormationPlayers((prev) =>
+      prev.map((player) => (player.id === id ? { ...player, imageUrl } : player)),
+    );
+  }
+
+  function updateSpecialPlayerPosition(id: string, x: number, y: number) {
+    setSpecialFormationPlayers((prev) =>
+      prev.map((player) => (player.id === id ? { ...player, x, y } : player)),
+    );
   }
 
   if (unauthorized) {
@@ -1104,6 +1126,39 @@ export default function AdminPanel() {
                 >
                   Save Special Event
                 </button>
+
+                <div className="mt-6 space-y-4 rounded-2xl border border-white/10 bg-black/20 p-4">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-bold uppercase tracking-[0.16em] text-white/75">
+                      Special Match Formation Ground
+                    </p>
+                    <span className="rounded-full border border-emerald-400/30 bg-emerald-500/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-300">
+                      Drag players to set positions
+                    </span>
+                  </div>
+
+                  <SpecialMatchFormationPitch
+                    players={specialFormationPlayers}
+                    editable
+                    onPlayerMove={updateSpecialPlayerPosition}
+                  />
+
+                  <div className="grid gap-2 md:grid-cols-2">
+                    {specialFormationPlayers.map((player) => (
+                      <div key={player.id} className="rounded-xl border border-white/10 bg-black/30 p-3">
+                        <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-white/65">
+                          {player.name} ({player.role})
+                        </p>
+                        <input
+                          value={player.imageUrl || ""}
+                          onChange={(e) => updateSpecialPlayerImage(player.id, e.target.value)}
+                          placeholder="Player image URL"
+                          className="mt-2 w-full rounded-lg border border-white/10 bg-black/40 px-2 py-1.5 text-xs font-bold text-white outline-none focus:border-emerald-500/40"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </section>
 
               <section className="glass-pane rounded-[2rem] p-8" aria-labelledby="live-scores-title">

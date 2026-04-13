@@ -21,6 +21,7 @@ import {
 import { MatchStatCard } from "./shared/MatchStatCard";
 import { TacticalCanvas } from "./shared/TacticalCanvas";
 import PhotoGallery from "./PhotoGallery";
+import { SpecialMatchFormationPitch, type SpecialFormationPlayer } from "./shared/SpecialMatchFormationPitch";
 
 type Player = {
   name: string;
@@ -65,6 +66,7 @@ type MatchData = {
       cmf: string[];
       cf: string[];
     };
+    formationPlayers: SpecialFormationPlayer[];
   };
   playersPerSide: 6 | 7;
   slotMinutes: number;
@@ -361,6 +363,20 @@ export default function LiveMatchBoard() {
                       <p className="text-sm font-black text-white">{specialEvent.venue}</p>
                    </div>
                 </div>
+
+                  <div className="mt-5 rounded-2xl border border-white/10 bg-black/30 p-4">
+                    <div className="mb-3 flex items-center justify-between">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/55">
+                        SMT Gamma Formation Ground
+                      </p>
+                      <span className="rounded-full border border-white/15 bg-black/40 px-2 py-1 text-[9px] font-bold uppercase tracking-[0.14em] text-white/70">
+                        Player graphics enabled
+                      </span>
+                    </div>
+                    <SpecialMatchFormationPitch
+                      players={Array.isArray(specialEvent.formationPlayers) ? specialEvent.formationPlayers : []}
+                    />
+                  </div>
               </div>
 
               {isUpcomingSpecialContext && (

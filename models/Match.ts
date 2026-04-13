@@ -116,6 +116,32 @@ const SpecialEventSchema = new Schema(
       cmf: { type: [String], default: ["Shahriar", "Mynul", "Sanim"] },
       cf: { type: [String], default: ["Jamil", "Imtiaz", "Israk"] },
     },
+    formationPlayers: {
+      type: [
+        {
+          id: { type: String, required: true },
+          name: { type: String, required: true },
+          role: { type: String, enum: ["GK", "CB", "CMF", "CF"], required: true },
+          x: { type: Number, required: true },
+          y: { type: Number, required: true },
+          imageUrl: { type: String, default: "" },
+        },
+      ],
+      default: [
+        { id: "gk-1-nayeem", name: "Nayeem", role: "GK", x: 9, y: 50, imageUrl: "" },
+        { id: "gk-2-omar", name: "Omar", role: "GK", x: 14, y: 50, imageUrl: "" },
+        { id: "cb-1-rakib", name: "Rakib", role: "CB", x: 24, y: 20, imageUrl: "" },
+        { id: "cb-2-fahim", name: "Fahim", role: "CB", x: 24, y: 40, imageUrl: "" },
+        { id: "cb-3-hasib", name: "Hasib", role: "CB", x: 24, y: 60, imageUrl: "" },
+        { id: "cb-4-polas", name: "Polas", role: "CB", x: 24, y: 80, imageUrl: "" },
+        { id: "cmf-1-shahriar", name: "Shahriar", role: "CMF", x: 48, y: 28, imageUrl: "" },
+        { id: "cmf-2-mynul", name: "Mynul", role: "CMF", x: 48, y: 50, imageUrl: "" },
+        { id: "cmf-3-sanim", name: "Sanim", role: "CMF", x: 48, y: 72, imageUrl: "" },
+        { id: "cf-1-jamil", name: "Jamil", role: "CF", x: 72, y: 32, imageUrl: "" },
+        { id: "cf-2-imtiaz", name: "Imtiaz", role: "CF", x: 72, y: 50, imageUrl: "" },
+        { id: "cf-3-israk", name: "Israk", role: "CF", x: 72, y: 68, imageUrl: "" },
+      ],
+    },
   },
   { _id: false },
 );

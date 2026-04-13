@@ -259,6 +259,16 @@ export async function PATCH(request: Request) {
               cf?: string[];
             }
           | undefined,
+        formationPlayers: body.formationPlayers as
+          | Array<{
+              id: string;
+              name: string;
+              role: "GK" | "CB" | "CMF" | "CF";
+              x: number;
+              y: number;
+              imageUrl?: string;
+            }>
+          | undefined,
       });
       return Response.json(result);
     }

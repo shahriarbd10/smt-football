@@ -1,4 +1,5 @@
 import {
+  buildSpecialFormationPlayers,
   defaultMatch,
   type EventType,
   type MatchLifecycle,
@@ -318,6 +319,14 @@ export async function getLatestMatchForPublic() {
       ...defaultMatch.specialEvent.squad,
       ...((match as any).specialEvent?.squad || {}),
     },
+    formationPlayers: Array.isArray((match as any).specialEvent?.formationPlayers)
+      ? (match as any).specialEvent.formationPlayers
+      : buildSpecialFormationPlayers(
+          {
+            ...defaultMatch.specialEvent.squad,
+            ...((match as any).specialEvent?.squad || {}),
+          },
+        ),
   };
 
   if (isCurrentlyLive(match)) {
@@ -528,6 +537,14 @@ export async function setSpecialEvent(input: {
     cmf?: string[];
     cf?: string[];
   };
+  formationPlayers?: Array<{
+    id: string;
+    name: string;
+    role: "GK" | "CB" | "CMF" | "CF";
+    x: number;
+    y: number;
+    imageUrl?: string;
+  }>;
 }) {
   await connectToDatabase();
   const match = await MatchModel.findOne({ slug: MATCH_SLUG });
@@ -560,6 +577,49 @@ export async function setSpecialEvent(input: {
       ),
     );
 
+  const normalizeFormationPlayers = (
+    items:
+      | Array<{
+          id: string;
+          name: string;
+          role: "GK" | "CB" | "CMF" | "CF";
+          x: number;
+          y: number;
+          imageUrl?: string;
+        }>
+      | undefined,
+    fallbackSquad: { gk: string[]; cb: string[]; cmf: string[]; cf: string[] },
+  ) => {
+    if (!Array.isArray(items) || items.length === 0) {
+      return buildSpecialFormationPlayers(fallbackSquad);
+    }
+
+    return items
+      .map((player, index) => ({
+        id: String(player.id || `special-${index + 1}`).trim() || `special-${index + 1}`,
+        name: String(player.name || "Player").trim() || `Player ${index + 1}`,
+        role: ["GK", "CB", "CMF", "CF"].includes(String(player.role))
+          ? (player.role as "GK" | "CB" | "CMF" | "CF")
+          : "CMF",
+        x: Math.max(4, Math.min(96, Number(player.x || 50))),
+        y: Math.max(6, Math.min(94, Number(player.y || 50))),
+        imageUrl: String(player.imageUrl || "").trim(),
+      }))
+      .filter((player) => Boolean(player.name));
+  };
+
+  const normalizedSquad = {
+    gk: normalizeList(next.squad?.gk),
+    cb: normalizeList(next.squad?.cb),
+    cmf: normalizeList(next.squad?.cmf),
+    cf: normalizeList(next.squad?.cf),
+  };
+
+  const formationPlayers = normalizeFormationPlayers(
+    input.formationPlayers || (existing?.formationPlayers as any[]),
+    normalizedSquad,
+  );
+
   match.set("specialEvent", {
     enabled: Boolean(next.enabled),
     title: String(next.title || defaultMatch.specialEvent.title).trim() || defaultMatch.specialEvent.title,
@@ -573,12 +633,8 @@ export async function setSpecialEvent(input: {
       defaultMatch.specialEvent.awayTeamName,
     badgeText: String(next.badgeText || defaultMatch.specialEvent.badgeText).trim() || defaultMatch.specialEvent.badgeText,
     venue: String(next.venue || defaultMatch.specialEvent.venue).trim() || defaultMatch.specialEvent.venue,
-    squad: {
-      gk: normalizeList(next.squad?.gk),
-      cb: normalizeList(next.squad?.cb),
-      cmf: normalizeList(next.squad?.cmf),
-      cf: normalizeList(next.squad?.cf),
-    },
+    squad: normalizedSquad,
+    formationPlayers,
   });
 
   await match.save();
