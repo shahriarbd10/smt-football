@@ -860,10 +860,18 @@ export default function AdminPanel() {
     );
   }
 
-  function updateSpecialPlayerDesignation(id: string, designation: string) {
+  function updateSpecialPlayerOfficeDesignation(id: string, officeDesignation: string) {
     setSpecialFormationPlayers((prev) =>
       prev.map((player) =>
-        player.id === id ? { ...player, officeDesignation: designation, designation } : player,
+        player.id === id ? { ...player, officeDesignation } : player,
+      ),
+    );
+  }
+
+  function updateSpecialPlayerDescription(id: string, designation: string) {
+    setSpecialFormationPlayers((prev) =>
+      prev.map((player) =>
+        player.id === id ? { ...player, designation } : player,
       ),
     );
   }
@@ -1257,9 +1265,15 @@ export default function AdminPanel() {
                           className="mt-2 w-full rounded-lg border border-white/10 bg-black/40 px-2 py-1.5 text-xs font-bold text-white outline-none focus:border-emerald-500/40"
                         />
                         <input
-                          value={player.designation || ""}
-                          onChange={(e) => updateSpecialPlayerDesignation(player.id, e.target.value)}
+                          value={player.officeDesignation || ""}
+                          onChange={(e) => updateSpecialPlayerOfficeDesignation(player.id, e.target.value)}
                           placeholder="Office designation"
+                          className="mt-2 w-full rounded-lg border border-white/10 bg-black/40 px-2 py-1.5 text-xs font-bold text-white outline-none focus:border-emerald-500/40"
+                        />
+                        <input
+                          value={player.designation || ""}
+                          onChange={(e) => updateSpecialPlayerDescription(player.id, e.target.value)}
+                          placeholder="Player description"
                           className="mt-2 w-full rounded-lg border border-white/10 bg-black/40 px-2 py-1.5 text-xs font-bold text-white outline-none focus:border-emerald-500/40"
                         />
 
