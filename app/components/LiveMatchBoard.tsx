@@ -152,15 +152,15 @@ const WALLPAPER_SLIDES = [
 
 const FOOTBALL_VIDEO_SHOWCASE = [
   {
-    title: "Match Atmosphere Loop",
+    title: "Crowd & Match Moments",
     src: "https://cdn.coverr.co/videos/coverr-football-player-scoring-a-goal-1579/1080p.mp4",
   },
   {
-    title: "Training Motion Reel",
+    title: "Training Session Highlights",
     src: "https://cdn.coverr.co/videos/coverr-soccer-practice-1577/1080p.mp4",
   },
   {
-    title: "Stadium Energy",
+    title: "Stadium Matchday Energy",
     src: "https://cdn.coverr.co/videos/coverr-young-football-players-training-4824/1080p.mp4",
   },
 ];
@@ -380,7 +380,7 @@ export default function LiveMatchBoard() {
       <div className="flex min-h-[60vh] items-center justify-center">
         <motion.div animate={{ scale: [1, 1.08, 1], opacity: [0.5, 1, 0.5] }} transition={{ repeat: Infinity, duration: 2 }} className="text-center">
           <Trophy className="mx-auto mb-4 text-cyan-400" size={48} />
-          <p className="section-title text-xs font-bold text-cyan-300">Initializing Matchday Feed</p>
+          <p className="section-title text-xs font-bold text-cyan-300">Loading Your Matchday Experience</p>
         </motion.div>
       </div>
     );
@@ -501,8 +501,8 @@ export default function LiveMatchBoard() {
           ))}
           <div className="absolute inset-0 bg-gradient-to-t from-[#030711] via-[#030711]/40 to-transparent" />
           <div className="absolute inset-x-0 bottom-0 p-4 md:p-6">
-            <p className="section-title text-[10px] font-bold text-cyan-200/90">Matchday Wallpaper Slider</p>
-            <p className="mt-1 text-2xl font-black text-white md:text-3xl">Football Atmosphere Backgrounds</p>
+            <p className="section-title text-[10px] font-bold text-cyan-200/90">Matchday Moments</p>
+            <p className="mt-1 text-2xl font-black text-white md:text-3xl">Relive Football Atmosphere</p>
             <div className="mt-3 flex gap-2">
               {WALLPAPER_SLIDES.map((_, index) => (
                 <button
@@ -525,12 +525,12 @@ export default function LiveMatchBoard() {
             <div className="mb-2 flex items-center gap-2">
               <span className={isLiveContext ? "live-indicator" : "h-2 w-2 rounded-full bg-cyan-300"} />
               <span className="section-title text-[10px] font-bold text-cyan-200/90">
-                {isLiveContext ? "Live Match Center" : "Tournament Overview"}
+                {isLiveContext ? "Live Match Updates" : "Matchday Hub"}
               </span>
             </div>
             <h1 className="text-4xl font-black leading-tight text-white sm:text-5xl lg:text-6xl">{data.title}</h1>
             <p className="mt-2 text-sm text-white/65">
-              Premium fixture intelligence for upcoming slots, recent results, standings, and live action.
+              See your next match, recent results, standings, and live action in one place.
             </p>
           </div>
 
@@ -617,7 +617,7 @@ export default function LiveMatchBoard() {
               <span className="rounded-full border border-white/25 px-2 py-0.5 text-[10px] text-white">VS</span>
               <span>{specialEvent.awayTeamName || teamB.name}</span>
               <span className="ml-auto rounded-full border border-white/20 bg-white/10 px-2.5 py-1 text-[9px] font-bold text-white/80">
-                Synced from Admin Special Event
+                Updated by Admin
               </span>
             </div>
 
@@ -666,9 +666,9 @@ export default function LiveMatchBoard() {
         <div className="mb-4 flex items-center justify-between">
           <h2 className="flex items-center gap-2 text-2xl font-black text-white">
             <Activity className="text-cyan-300" size={20} />
-            Football Animations & Videos
+            Watch Football Highlights
           </h2>
-          <span className="section-title text-[10px] font-bold text-white/45">Online Motion Feed</span>
+          <span className="section-title text-[10px] font-bold text-white/45">For Fans</span>
         </div>
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {FOOTBALL_VIDEO_SHOWCASE.map((video) => (
@@ -702,7 +702,7 @@ export default function LiveMatchBoard() {
                 <Calendar className="text-cyan-300" size={20} />
                 Next Match Highlight
               </h2>
-              <span className="premium-chip rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em]">Centerpiece</span>
+              <span className="premium-chip rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em]">Next Up</span>
             </div>
 
             {nextUpcoming ? (
@@ -854,7 +854,7 @@ export default function LiveMatchBoard() {
           <div className="mb-4 flex items-center justify-between">
             <h2 className="flex items-center gap-2 text-2xl font-black text-white">
               <LayoutGrid className="text-cyan-300" size={20} />
-              Slot-Based Match Listings
+              Available Match Slots
             </h2>
             <span className="section-title text-[10px] font-bold text-white/45">Scan-ready cards</span>
           </div>
@@ -989,7 +989,7 @@ export default function LiveMatchBoard() {
                   <div className="mb-2 flex items-center gap-2">
                     <span className={isLiveContext ? "live-indicator" : "h-2 w-2 rounded-full bg-amber-300"} />
                     <span className={`section-title text-[10px] font-bold ${isLiveContext ? "text-emerald-300" : "text-amber-200"}`}>
-                      {isLiveContext ? "Live Feed Active" : "Record Mode"}
+                      {isLiveContext ? "Live Now" : "Match Summary"}
                     </span>
                   </div>
                   <h2 className="text-4xl font-black text-white md:text-5xl">Live Match Data</h2>
@@ -1099,7 +1099,7 @@ export default function LiveMatchBoard() {
                       <Trophy className="text-cyan-300" size={20} />
                       Match Leaders
                     </h3>
-                    <span className="premium-chip rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em]">Performance Tracker</span>
+                    <span className="premium-chip rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em]">Top Performers</span>
                   </div>
 
                   <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
