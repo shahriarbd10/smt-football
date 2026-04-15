@@ -19,6 +19,7 @@ import {
   LayoutGrid,
   Timer,
   Users,
+  User,
   Flag,
   CircleCheck,
   CircleSlash,
@@ -164,6 +165,11 @@ const FOOTBALL_VIDEO_SHOWCASE = [
     src: "https://cdn.coverr.co/videos/coverr-young-football-players-training-4824/1080p.mp4",
   },
 ];
+
+const TEAM_LOGOS: Record<"A" | "B", string> = {
+  A: "/images/team_a.png",
+  B: "/images/team_b.png",
+};
 
 const fetcher = async (url: string): Promise<MatchData> => {
   const response = await fetch(url, { cache: "no-store" });
@@ -349,12 +355,22 @@ function buildStandings(records: MatchRecord[]): StandingsRow[] {
 
 export default function LiveMatchBoard() {
   const { data, error } = useSWR("/api/match", fetcher, {
-    refreshInterval: 2500,
+    // Adaptive polling: fast only during live play, slower otherwise.
+    refreshInterval: (latest) => {
+      if (typeof document !== "undefined" && document.hidden) return 0;
+      return latest?.isLiveContext ? 3000 : 15000;
+    },
+    revalidateOnFocus: false,
+    revalidateOnReconnect: true,
+    refreshWhenHidden: false,
+    refreshWhenOffline: false,
+    dedupingInterval: 5000,
   });
 
   const [showRecordDetails, setShowRecordDetails] = useState(false);
   const [fixtureFilter, setFixtureFilter] = useState<FixtureFilter>("all");
   const [activeWallpaper, setActiveWallpaper] = useState(0);
+  const [selectedHistoryMatchId, setSelectedHistoryMatchId] = useState<string>("");
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -477,6 +493,23 @@ export default function LiveMatchBoard() {
 
   const historyMatches = [...(data.matchHistory || [])].sort(
     (a, b) => new Date(b.kickoffTime).getTime() - new Date(a.kickoffTime).getTime(),
+  );
+  const selectedHistoryMatch =
+    historyMatches.find((record) => record.id === selectedHistoryMatchId) || historyMatches[0];
+  const selectedHistoryTimeline = [...(selectedHistoryMatch?.events || [])].sort((a, b) => {
+    if (a.minute !== b.minute) return a.minute - b.minute;
+    return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+  });
+  const selectedHistoryStats = (selectedHistoryMatch?.events || []).reduce(
+    (acc, event) => {
+      acc.total += 1;
+      if (event.type === "goal") acc.goals += 1;
+      if (event.type === "assist") acc.assists += 1;
+      if (event.type === "yellow") acc.yellow += 1;
+      if (event.type === "red") acc.red += 1;
+      return acc;
+    },
+    { total: 0, goals: 0, assists: 0, yellow: 0, red: 0 },
   );
 
   const nextUpcoming = upcomingEvents.find((event) => new Date(event.eventDate).getTime() >= Date.now()) || upcomingEvents[0];
@@ -612,10 +645,16 @@ export default function LiveMatchBoard() {
 
           <div className="relative z-10">
             <p className="text-4xl font-black leading-none text-white sm:text-5xl md:text-6xl">Starting Lineup</p>
-            <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] font-bold uppercase tracking-[0.14em] text-indigo-100/85">
-              <span>{specialEvent.homeTeamName || teamA.name}</span>
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] font-bold uppercase tracking-[0.14em] text-indigo-100/85">
+              <span className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/5 px-2.5 py-1">
+                <img src={TEAM_LOGOS.A} alt={specialEvent.homeTeamName || teamA.name} className="h-5 w-5 rounded-full object-cover" />
+                <span>{specialEvent.homeTeamName || teamA.name}</span>
+              </span>
               <span className="rounded-full border border-white/25 px-2 py-0.5 text-[10px] text-white">VS</span>
-              <span>{specialEvent.awayTeamName || teamB.name}</span>
+              <span className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/5 px-2.5 py-1">
+                <img src={TEAM_LOGOS.B} alt={specialEvent.awayTeamName || teamB.name} className="h-5 w-5 rounded-full object-cover" />
+                <span>{specialEvent.awayTeamName || teamB.name}</span>
+              </span>
               <span className="ml-auto rounded-full border border-white/20 bg-white/10 px-2.5 py-1 text-[9px] font-bold text-white/80">
                 Updated by Admin
               </span>
@@ -636,8 +675,10 @@ export default function LiveMatchBoard() {
                       {player.imageUrl ? (
                         <img src={player.imageUrl} alt={player.name} className="h-full w-full object-cover" />
                       ) : (
-                        <div className="flex h-full w-full items-center justify-center text-3xl font-black text-white/70">
-                          {player.name.slice(0, 1).toUpperCase()}
+                        <div className="flex h-full w-full items-center justify-center">
+                          <div className="flex h-16 w-16 items-center justify-center rounded-full border border-white/25 bg-white/10">
+                            <User size={28} className="text-white/80" />
+                          </div>
                         </div>
                       )}
                     </div>
@@ -789,11 +830,24 @@ export default function LiveMatchBoard() {
                 historyMatches.slice(0, 6).map((record) => {
                   const left = record.teams?.[0];
                   const right = record.teams?.[1];
+                  const isSelected = selectedHistoryMatch?.id === record.id;
                   return (
-                    <div key={record.id} className="rounded-2xl border border-white/10 bg-black/25 p-4 transition hover:border-emerald-300/30 hover:bg-black/35">
+                    <button
+                      type="button"
+                      key={record.id}
+                      onClick={() => setSelectedHistoryMatchId(record.id)}
+                      className={`w-full rounded-2xl border bg-black/25 p-4 text-left transition hover:-translate-y-0.5 hover:border-emerald-300/30 hover:bg-black/35 ${
+                        isSelected ? "border-cyan-300/45 shadow-[0_8px_20px_rgba(34,211,238,0.2)]" : "border-white/10"
+                      }`}
+                    >
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <p className="text-sm font-black text-white">{record.title}</p>
-                        <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/45">{formatDate(record.kickoffTime, false)}</span>
+                        <span className="inline-flex items-center gap-2">
+                          <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/45">{formatDate(record.kickoffTime, false)}</span>
+                          <span className={`rounded-full px-2 py-1 text-[9px] font-bold uppercase tracking-[0.12em] ${isSelected ? "bg-cyan-400/20 text-cyan-200" : "bg-white/10 text-white/70"}`}>
+                            {isSelected ? "Viewing" : "View details"}
+                          </span>
+                        </span>
                       </div>
                       <div className="mt-3 grid grid-cols-[1fr_auto_1fr] items-center gap-2">
                         <p className="truncate text-right text-sm font-bold text-white/85">{left?.name || "Team A"}</p>
@@ -802,11 +856,79 @@ export default function LiveMatchBoard() {
                         </p>
                         <p className="truncate text-sm font-bold text-white/85">{right?.name || "Team B"}</p>
                       </div>
-                    </div>
+                    </button>
                   );
                 })
               )}
             </div>
+
+            {selectedHistoryMatch ? (
+              <div className="mt-4 rounded-2xl border border-cyan-300/25 bg-gradient-to-r from-cyan-500/10 to-emerald-500/10 p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="section-title text-[10px] font-bold text-cyan-200/90">Previous Match Details</p>
+                    <p className="mt-1 text-lg font-black text-white">{selectedHistoryMatch.title}</p>
+                    <p className="mt-1 text-xs text-white/65">
+                      {formatDate(selectedHistoryMatch.kickoffTime, true)} • {selectedHistoryMatch.slotMinutes} min slot • {selectedHistoryMatch.playersPerSide}v{selectedHistoryMatch.playersPerSide}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-white/15 bg-black/35 px-3 py-2 text-center">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-white/50">Final Score</p>
+                    <p className="mt-1 text-xl font-black text-white tabular-nums">
+                      {selectedHistoryMatch.teams?.[0]?.score ?? 0} - {selectedHistoryMatch.teams?.[1]?.score ?? 0}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-5">
+                  <div className="rounded-xl border border-white/10 bg-black/30 px-2 py-2 text-center">
+                    <p className="text-[9px] font-bold uppercase tracking-[0.1em] text-white/50">Events</p>
+                    <p className="text-base font-black text-white">{selectedHistoryStats.total}</p>
+                  </div>
+                  <div className="rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-2 py-2 text-center">
+                    <p className="text-[9px] font-bold uppercase tracking-[0.1em] text-emerald-200/80">Goals</p>
+                    <p className="text-base font-black text-emerald-200">{selectedHistoryStats.goals}</p>
+                  </div>
+                  <div className="rounded-xl border border-cyan-400/30 bg-cyan-500/10 px-2 py-2 text-center">
+                    <p className="text-[9px] font-bold uppercase tracking-[0.1em] text-cyan-200/80">Assists</p>
+                    <p className="text-base font-black text-cyan-200">{selectedHistoryStats.assists}</p>
+                  </div>
+                  <div className="rounded-xl border border-yellow-400/30 bg-yellow-500/10 px-2 py-2 text-center">
+                    <p className="text-[9px] font-bold uppercase tracking-[0.1em] text-yellow-200/80">Yellow</p>
+                    <p className="text-base font-black text-yellow-200">{selectedHistoryStats.yellow}</p>
+                  </div>
+                  <div className="rounded-xl border border-rose-400/30 bg-rose-500/10 px-2 py-2 text-center">
+                    <p className="text-[9px] font-bold uppercase tracking-[0.1em] text-rose-200/80">Red</p>
+                    <p className="text-base font-black text-rose-200">{selectedHistoryStats.red}</p>
+                  </div>
+                </div>
+
+                <div className="mt-3 max-h-52 space-y-2 overflow-y-auto pr-1">
+                  {selectedHistoryTimeline.length === 0 ? (
+                    <p className="rounded-xl border border-dashed border-white/15 bg-black/20 px-3 py-2 text-xs font-bold text-white/55">
+                      No event timeline available for this match.
+                    </p>
+                  ) : (
+                    selectedHistoryTimeline.map((event, index) => (
+                      <div key={`${event.createdAt}-${index}`} className="flex items-center justify-between rounded-xl border border-white/10 bg-black/30 px-3 py-2">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-bold text-white">{event.playerName}</p>
+                          <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-white/45">
+                            {event.teamKey === "A"
+                              ? selectedHistoryMatch.teams?.[0]?.name || "Team A"
+                              : selectedHistoryMatch.teams?.[1]?.name || "Team B"}{" "}
+                            • {event.type}
+                          </p>
+                        </div>
+                        <span className="rounded-full border border-white/15 bg-black/40 px-2.5 py-1 text-xs font-black text-white">
+                          {event.minute}&apos;
+                        </span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            ) : null}
           </div>
           <div className="premium-surface rounded-[2rem] p-5 md:p-7">
             <div className="mb-4 flex items-center justify-between">
@@ -916,7 +1038,10 @@ export default function LiveMatchBoard() {
             return (
               <article key={team.key} className="rounded-3xl border border-white/10 bg-black/30 p-5">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-2xl font-black text-white">{team.name}</h3>
+                  <h3 className="inline-flex items-center gap-2 text-2xl font-black text-white">
+                    <img src={TEAM_LOGOS[team.key]} alt={team.name} className="h-8 w-8 rounded-full object-cover ring-1 ring-white/20" />
+                    {team.name}
+                  </h3>
                   <span className={`rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] ${index === 0 ? "bg-cyan-500/15 text-cyan-200" : "bg-emerald-500/15 text-emerald-200"}`}>
                     Team {team.key}
                   </span>
@@ -1040,7 +1165,10 @@ export default function LiveMatchBoard() {
                 <section className="grid gap-5 lg:grid-cols-[1fr_auto_1fr]">
                   <motion.div whileHover={{ y: -4 }} className="glass-pane group relative overflow-hidden rounded-[2rem] p-5 text-center md:p-7">
                     <div className="mb-4">
-                      <h3 className="text-3xl font-black text-white">{teamA.name}</h3>
+                      <h3 className="inline-flex items-center gap-2 text-3xl font-black text-white">
+                        <img src={TEAM_LOGOS.A} alt={teamA.name} className="h-9 w-9 rounded-full object-cover ring-1 ring-white/20" />
+                        {teamA.name}
+                      </h3>
                     </div>
                     <div className="glow-a">
                       <AnimatePresence mode="wait">
@@ -1070,7 +1198,10 @@ export default function LiveMatchBoard() {
 
                   <motion.div whileHover={{ y: -4 }} className="glass-pane group relative overflow-hidden rounded-[2rem] p-5 text-center md:p-7">
                     <div className="mb-4">
-                      <h3 className="text-3xl font-black text-white">{teamB.name}</h3>
+                      <h3 className="inline-flex items-center gap-2 text-3xl font-black text-white">
+                        <img src={TEAM_LOGOS.B} alt={teamB.name} className="h-9 w-9 rounded-full object-cover ring-1 ring-white/20" />
+                        {teamB.name}
+                      </h3>
                     </div>
                     <div className="glow-b">
                       <AnimatePresence mode="wait">

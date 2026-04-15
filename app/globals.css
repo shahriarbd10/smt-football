@@ -53,12 +53,14 @@ h1, h2, h3, h4, h5, h6 {
   backdrop-filter: blur(16px) saturate(180%);
   border: 1px solid var(--border);
   box-shadow: var(--shadow-premium);
+  transition: transform 220ms ease, box-shadow 220ms ease, border-color 220ms ease;
 }
 
 .glass-pane-brighter {
   background: var(--glass);
   backdrop-filter: blur(12px);
   border: 1px solid rgba(148, 163, 184, 0.24);
+  transition: transform 220ms ease, box-shadow 220ms ease, border-color 220ms ease;
 }
 
 .premium-surface {
@@ -66,6 +68,15 @@ h1, h2, h3, h4, h5, h6 {
   border: 1px solid rgba(129, 168, 255, 0.2);
   box-shadow: var(--shadow-premium);
   backdrop-filter: blur(14px);
+  transition: transform 260ms ease, box-shadow 260ms ease, border-color 260ms ease, background 260ms ease;
+}
+
+.premium-surface:hover,
+.glass-pane:hover,
+.glass-pane-brighter:hover {
+  transform: translateY(-2px);
+  border-color: rgba(103, 232, 249, 0.42);
+  box-shadow: var(--shadow-hover);
 }
 
 .premium-chip {

@@ -195,6 +195,9 @@ export default function AdminPanel() {
   });
   const [specialFormationPlayers, setSpecialFormationPlayers] = useState<SpecialFormationPlayer[]>([]);
   const [uploadingSpecialPlayerId, setUploadingSpecialPlayerId] = useState<string | null>(null);
+  const [autoSyncSpecialFormation, setAutoSyncSpecialFormation] = useState(true);
+  const [hasUnsavedSpecialFormation, setHasUnsavedSpecialFormation] = useState(false);
+  const [savingSpecialFormation, setSavingSpecialFormation] = useState(false);
   const upcomingDateInputRef = useRef<HTMLInputElement>(null);
 
   const unauthorized = error?.message === "UNAUTHORIZED";
@@ -799,6 +802,17 @@ export default function AdminPanel() {
   }
 
   async function saveSpecialEventConfig() {
+    try {
+      const updated = await persistSpecialEventConfig(specialFormationPlayers);
+      mutate(updated, false);
+      setMessage("Special event configuration updated.");
+      setHasUnsavedSpecialFormation(false);
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Could not save special event config.");
+    }
+  }
+
+  function buildSpecialEventPayload(formationPlayers: SpecialFormationPlayer[]) {
     const toList = (raw: string) =>
       raw
         .split(",")
@@ -809,29 +823,46 @@ export default function AdminPanel() {
       ? new Date(specialEventDraft.eventDate).toISOString()
       : undefined;
 
+    return {
+      action: "setSpecialEvent",
+      enabled: specialEventDraft.enabled,
+      title: specialEventDraft.title,
+      subtitle: specialEventDraft.subtitle,
+      eventDate: eventDateIso,
+      homeTeamName: specialEventDraft.homeTeamName,
+      awayTeamName: specialEventDraft.awayTeamName,
+      badgeText: specialEventDraft.badgeText,
+      venue: specialEventDraft.venue,
+      squad: {
+        gk: toList(specialEventDraft.gk),
+        cb: toList(specialEventDraft.cb),
+        cmf: toList(specialEventDraft.cmf),
+        cf: toList(specialEventDraft.cf),
+      },
+      formationPlayers,
+    };
+  }
+
+  async function persistSpecialEventConfig(formationPlayers: SpecialFormationPlayer[]) {
+    return patchMatch(buildSpecialEventPayload(formationPlayers));
+  }
+
+  async function saveSpecialFormationProfiles(options?: { silent?: boolean }) {
+    if (savingSpecialFormation) return;
     try {
-      const updated = await patchMatch({
-        action: "setSpecialEvent",
-        enabled: specialEventDraft.enabled,
-        title: specialEventDraft.title,
-        subtitle: specialEventDraft.subtitle,
-        eventDate: eventDateIso,
-        homeTeamName: specialEventDraft.homeTeamName,
-        awayTeamName: specialEventDraft.awayTeamName,
-        badgeText: specialEventDraft.badgeText,
-        venue: specialEventDraft.venue,
-        squad: {
-          gk: toList(specialEventDraft.gk),
-          cb: toList(specialEventDraft.cb),
-          cmf: toList(specialEventDraft.cmf),
-          cf: toList(specialEventDraft.cf),
-        },
-        formationPlayers: specialFormationPlayers,
-      });
+      setSavingSpecialFormation(true);
+      const updated = await persistSpecialEventConfig(specialFormationPlayers);
       mutate(updated, false);
-      setMessage("Special event configuration updated.");
+      setHasUnsavedSpecialFormation(false);
+      if (!options?.silent) {
+        setMessage("Player position and office designation synced.");
+      }
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Could not save special event config.");
+      if (!options?.silent) {
+        setMessage(err instanceof Error ? err.message : "Could not sync player profiles.");
+      }
+    } finally {
+      setSavingSpecialFormation(false);
     }
   }
 
@@ -858,6 +889,7 @@ export default function AdminPanel() {
     setSpecialFormationPlayers((prev) =>
       prev.map((player) => (player.id === id ? { ...player, name } : player)),
     );
+    setHasUnsavedSpecialFormation(true);
   }
 
   function updateSpecialPlayerOfficeDesignation(id: string, officeDesignation: string) {
@@ -866,6 +898,7 @@ export default function AdminPanel() {
         player.id === id ? { ...player, officeDesignation } : player,
       ),
     );
+    setHasUnsavedSpecialFormation(true);
   }
 
   function updateSpecialPlayerDescription(id: string, designation: string) {
@@ -874,12 +907,14 @@ export default function AdminPanel() {
         player.id === id ? { ...player, designation } : player,
       ),
     );
+    setHasUnsavedSpecialFormation(true);
   }
 
   function updateSpecialPlayerPosition(id: string, x: number, y: number) {
     setSpecialFormationPlayers((prev) =>
       prev.map((player) => (player.id === id ? { ...player, x, y } : player)),
     );
+    setHasUnsavedSpecialFormation(true);
   }
 
   async function uploadSpecialPlayerImage(playerId: string, file?: File | null) {
@@ -924,37 +959,11 @@ export default function AdminPanel() {
         player.id === playerId ? { ...player, imageUrl: uploadData.secure_url } : player,
       );
 
-      const toList = (raw: string) =>
-        raw
-          .split(",")
-          .map((item) => item.trim())
-          .filter(Boolean);
-
-      const eventDateIso = specialEventDraft.eventDate
-        ? new Date(specialEventDraft.eventDate).toISOString()
-        : undefined;
-
-      const updated = await patchMatch({
-        action: "setSpecialEvent",
-        enabled: specialEventDraft.enabled,
-        title: specialEventDraft.title,
-        subtitle: specialEventDraft.subtitle,
-        eventDate: eventDateIso,
-        homeTeamName: specialEventDraft.homeTeamName,
-        awayTeamName: specialEventDraft.awayTeamName,
-        badgeText: specialEventDraft.badgeText,
-        venue: specialEventDraft.venue,
-        squad: {
-          gk: toList(specialEventDraft.gk),
-          cb: toList(specialEventDraft.cb),
-          cmf: toList(specialEventDraft.cmf),
-          cf: toList(specialEventDraft.cf),
-        },
-        formationPlayers: nextFormationPlayers,
-      });
+      const updated = await persistSpecialEventConfig(nextFormationPlayers);
 
       setSpecialFormationPlayers(nextFormationPlayers);
       mutate(updated, false);
+      setHasUnsavedSpecialFormation(false);
       setMessage("Player image uploaded and saved to Cloudinary + match data.");
     } catch (err) {
       setMessage(err instanceof Error ? err.message : "Could not upload player image.");
@@ -962,6 +971,18 @@ export default function AdminPanel() {
       setUploadingSpecialPlayerId(null);
     }
   }
+
+  useEffect(() => {
+    if (!autoSyncSpecialFormation || !hasUnsavedSpecialFormation) {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      void saveSpecialFormationProfiles({ silent: true });
+    }, 700);
+
+    return () => clearTimeout(timer);
+  }, [autoSyncSpecialFormation, hasUnsavedSpecialFormation, specialFormationPlayers]);
 
   if (unauthorized) {
     return (
@@ -1242,9 +1263,37 @@ export default function AdminPanel() {
                     <p className="text-xs font-bold uppercase tracking-[0.16em] text-white/75">
                       Special Match Formation Ground
                     </p>
-                    <span className="rounded-full border border-emerald-400/30 bg-emerald-500/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-300">
-                      Drag players to set positions
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <label className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-black/35 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-white/75">
+                        <input
+                          type="checkbox"
+                          checked={autoSyncSpecialFormation}
+                          onChange={(e) => setAutoSyncSpecialFormation(e.target.checked)}
+                          className="h-3.5 w-3.5"
+                        />
+                        Auto Sync
+                      </label>
+                      <span className="rounded-full border border-emerald-400/30 bg-emerald-500/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-300">
+                        Drag players to set positions
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/10 bg-black/25 p-3">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/65">
+                      {hasUnsavedSpecialFormation
+                        ? "Unsaved lineup profile changes detected"
+                        : "Player position and office designation are synced"}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => saveSpecialFormationProfiles()}
+                      disabled={savingSpecialFormation || !hasUnsavedSpecialFormation}
+                      className="inline-flex items-center gap-2 rounded-lg bg-cyan-400/15 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-cyan-200 transition hover:bg-cyan-400/25 disabled:cursor-not-allowed disabled:opacity-55"
+                    >
+                      {savingSpecialFormation ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
+                      Save Position & Designation
+                    </button>
                   </div>
 
                   <SpecialMatchFormationPitch
